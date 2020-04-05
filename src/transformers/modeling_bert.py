@@ -1383,8 +1383,8 @@ class BertForTokenClassification(BertPreTrainedModel):
             loss_fct = MSELoss()
             active_loss = attention_mask.view(-1) == 1
             active_soft_labels = soft_labels.contiguous().view(-1, self.num_labels)[active_loss]
-            active_logits = active_logits.contiguous().view(-1, active_logits.size(-1))[active_loss]
-            loss = loss_fct(logits, active_soft_labels)
+            active_logits = logits.contiguous().view(-1, active_logits.size(-1))[active_loss]
+            loss = loss_fct(active_logits, active_soft_labels)
 
             outputs = (loss,) + outputs
 
