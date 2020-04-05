@@ -164,7 +164,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     )
     set_seed(args)  # Added here for reproductibility
     for _ in train_iterator:
-        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
+        epoch_iterator = tqdm(train_dataloader, desc="Iter(loss=X.XXX, lr=X.XXXXXXXX)", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
 
             # Skip past any already trained steps if resuming training
@@ -195,7 +195,9 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                 loss.backward()
 
             tr_loss += loss.item()
+
             if (step + 1) % args.gradient_accumulation_steps == 0:
+                iter_bar.set_description('Iter (loss=%5.3f) lr=%9.7f' % (loss.item(), scheduler.get_lr()[0]))
                 if args.fp16:
                     torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
                 else:
