@@ -61,7 +61,11 @@ def read_examples_from_file(file_path, mode):
             line = line.strip()
             words = line[0].split()
             labels = line[1].split()
-            assert len(words) == len(labels)
+            try:
+                assert len(words) == len(labels)
+            except Exception as e :
+                print("len words:",len(words))
+                print("len labels:", len(labels))
             guid_index += 1
             examples.append(InputExample(guid=guid_index, words=words, labels=labels))
     return examples
