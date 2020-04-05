@@ -58,7 +58,7 @@ def read_examples_from_file(file_path, mode):
         words = []
         labels = []
         for line in f:
-            line = line.strip()
+            line = line.strip().split("\t")
             words = line[0].split()
             labels = line[1].split()
             try:
