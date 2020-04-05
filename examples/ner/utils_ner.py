@@ -64,8 +64,6 @@ def read_examples_from_file(file_path, mode):
             assert len(words) == len(labels)
             guid_index += 1
             examples.append(InputExample(guid=guid_index, words=words, labels=labels))
-        if words:
-            examples.append(InputExample(guid="{}-{}".format(mode, guid_index), words=words, labels=labels))
     return examples
 
 
