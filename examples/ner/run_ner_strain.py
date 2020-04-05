@@ -310,6 +310,8 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
                 out_label_list[i].append(label_map[out_label_ids[i][j]])
                 preds_list[i].append(label_map[preds[i][j]])
 
+    print("preds:", preds_list[0])
+    print("labels:", out_label_list[0])
     results = {
         "loss": eval_loss,
         "precision": precision_score(out_label_list, preds_list),
