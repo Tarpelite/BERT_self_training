@@ -50,28 +50,20 @@ class InputFeatures(object):
         self.label_ids = label_ids
 
 
-def read_examples_from_file(data_dir, mode):
-    file_path = os.path.join(data_dir, "{}.txt".format(mode))
+def read_examples_from_file(file_path, mode):
+    
     guid_index = 1
     examples = []
     with open(file_path, encoding="utf-8") as f:
         words = []
         labels = []
         for line in f:
-            if line.startswith("-DOCSTART-") or line == "" or line == "\n":
-                if words:
-                    examples.append(InputExample(guid="{}-{}".format(mode, guid_index), words=words, labels=labels))
-                    guid_index += 1
-                    words = []
-                    labels = []
-            else:
-                splits = line.split(" ")
-                words.append(splits[0])
-                if len(splits) > 1:
-                    labels.append(splits[-1].replace("\n", ""))
-                else:
-                    # Examples could have no label for mode = "test"
-                    labels.append("O")
+            line = line.strip()
+            words = line[0].split()
+            labels = line[1].split()
+            assert len(words) == len(labels)
+            guid_index += 1
+            examples.append(InputExample(guid=guid_index, words=words, labels=labels))
         if words:
             examples.append(InputExample(guid="{}-{}".format(mode, guid_index), words=words, labels=labels))
     return examples
