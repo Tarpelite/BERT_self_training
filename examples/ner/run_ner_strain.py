@@ -615,10 +615,10 @@ def main():
         with open(args.logits_file, "rb") as f:
             datasets = pickle.load(f)
         
-        all_input_ids = torch.tensor([x[0] for x in datasets], dtype=torch.long)
-        all_input_mask = torch.tensor([x[1] for x  in datasets], dtype=torch.long)
-        all_segment_ids = torch.tensor([x[2] for x in datasets], dtype=torch.long)
-        all_ner_logits = torch.tensor([x[3] for x in datasets], dtype=torch.float)
+        all_input_ids = torch.tensor(datasets[0], dtype=torch.long)
+        all_input_mask = torch.tensor(datasets[1], dtype=torch.long)
+        all_segment_ids = torch.tensor(datasets[2], dtype=torch.long)
+        all_ner_logits = torch.tensor(datasets[3], dtype=torch.float)
 
         train_dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_ner_logits)
 
