@@ -1387,7 +1387,7 @@ class BertForTokenClassification(BertPreTrainedModel):
             loss = loss_fct(logits, active_soft_labels)
 
             outputs = (loss,) + outputs
-            
+
         elif labels is not None:
             loss_fct = CrossEntropyLoss()
             # Only keep active parts of the loss
@@ -1518,68 +1518,68 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
 
-class BERTForNER(BertPretrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
+# class BERTForNER(BertPretrainedModel):
+#     def __init__(self, config):
+#         super().__init__(config)
+#         self.num_labels = config.num_labels
 
-        self.bert = BertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+#         self.bert = BertModel(config)
+#         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+#         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         
 
-        self.init_weights()
+#         self.init_weights()
     
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        soft_labels=None,
-    ):
-        outputs = self.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-        )
+#     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+#     def forward(
+#         self,
+#         input_ids=None,
+#         attention_mask=None,
+#         token_type_ids=None,
+#         position_ids=None,
+#         head_mask=None,
+#         inputs_embeds=None,
+#         labels=None,
+#         soft_labels=None,
+#     ):
+#         outputs = self.bert(
+#             input_ids,
+#             attention_mask=attention_mask,
+#             token_type_ids=token_type_ids,
+#             position_ids=position_ids,
+#             head_mask=head_mask,
+#             inputs_embeds=inputs_embeds,
+#         )
 
-        sequence_output = outputs[0]
+#         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
+#         sequence_output = self.dropout(sequence_output)
+#         logits = self.classifier(sequence_output)
 
-        outputs = (logits,) + outputs[2:]
+#         outputs = (logits,) + outputs[2:]
 
-        if soft_labels is not None:
-            loss_fct = MSELoss()
-            active_loss = attention_mask.view(-1) == 1
-            active_soft_labels = soft_labels.contiguous().view(-1, num_labels)[active_loss]
-            active_logits = active_logits.contiguous().view(-1, active_logits.size(-1))[active_loss]
-            loss = loss_fct(logits, active_soft_labels)
+#         if soft_labels is not None:
+#             loss_fct = MSELoss()
+#             active_loss = attention_mask.view(-1) == 1
+#             active_soft_labels = soft_labels.contiguous().view(-1, num_labels)[active_loss]
+#             active_logits = active_logits.contiguous().view(-1, active_logits.size(-1))[active_loss]
+#             loss = loss_fct(logits, active_soft_labels)
 
-            outputs = (loss,) + outputs
-        elif labels is not None:
-            loss_fct = CrossEntropyLoss()
+#             outputs = (loss,) + outputs
+#         elif labels is not None:
+#             loss_fct = CrossEntropyLoss()
 
-            if attention_mask is not None:
-                active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.num_labels)
-                active_labels = torch.where(
-                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
-                )
-                loss = loss_fct(active_logits, active_labels)
-            else:
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            outputs = (loss,) + outputs
+#             if attention_mask is not None:
+#                 active_loss = attention_mask.view(-1) == 1
+#                 active_logits = logits.view(-1, self.num_labels)
+#                 active_labels = torch.where(
+#                     active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+#                 )
+#                 loss = loss_fct(active_logits, active_labels)
+#             else:
+#                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+#             outputs = (loss,) + outputs
         
-        return outputs
+#         return outputs
 
 
