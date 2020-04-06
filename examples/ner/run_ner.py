@@ -39,7 +39,8 @@ from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
-from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
+from utils_ner import convert_examples_to_features, get_labels
+from utils_ner import read_examples_from_ner_file as read_examples_from_file
 
 
 try:
@@ -302,6 +303,15 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
             if out_label_ids[i, j] != pad_token_label_id:
                 out_label_list[i].append(label_map[out_label_ids[i][j]])
                 preds_list[i].append(label_map[preds[i][j]])
+    
+    for i in range(len(preds_list)):
+        for j in range(len(preds_list[i])):
+            preds_list[i][j] = preds_list[i][j].split("-")[-1]
+    
+    for i in range(len(out_label_list)):
+        for j in range(len(out_label_list[i])):
+            out_label_list[i][j] = out_label_list[i][j].split("-")[-1]
+
 
     results = {
         "loss": eval_loss,

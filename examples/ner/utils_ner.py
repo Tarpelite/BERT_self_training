@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class InputExample(object):
     """A single training/test example for token classification."""
 
-    def __init__(self, guid, words, labels):
+    def __init__(self, guid, words, labels = None):
         """Constructs a InputExample.
 
         Args:
@@ -48,6 +48,26 @@ class InputFeatures(object):
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.label_ids = label_ids
+
+def read_examples_from_ner_file(data_dir, mode):
+    file_path = os.path.join(data_dir, "{}.txt".format(mode))
+    guid_index = 1
+    examples = []
+    with open(file_path, "r", encoding="utf-8") as f:
+        for line in f.readlines():
+            if mode != "test":
+                line = line.strip().split("\t")
+                words = line[0].split()
+                labels = line[1].split()
+                assert len(words) == len(labels)
+                guid_index += 1
+                examples.append(InputExample(guid=guid_index, words=words, labels=labels))
+            else:
+                line = line.strip()
+                words = line.split()
+                guid_index += 1
+                examples.append(InputExample(guid=guid_index, words=words))
+
 
 
 def read_examples_from_file(file_path, mode):
