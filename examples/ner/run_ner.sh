@@ -22,6 +22,6 @@ python -m torch.distributed.launch \
         --nproc_per_node 4 examples/ner/run_ner_strain.py \
         --model_type bert --model_name_or_path bert-base-uncased --output_dir $output_dir \
         --max_seq_length 128  --do_eval --do_lower_case --per_gpu_train_batch_size $BS \
-        --per_gpu_eval_batch_size $64 --learning_rate $LR --weight_decay $WD --num_train_epochs $EP \
+        --per_gpu_eval_batch_size $BS --learning_rate $LR --weight_decay $WD --num_train_epochs $EP \
         --warmup_ratio $WR --logits_file $logits_file --eval_file $eval_file --overwrite_output_dir \
         --fp16 --fp16_opt_level O2
