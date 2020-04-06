@@ -82,6 +82,8 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     else:
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
+    if args.warmup_ratio > 0:
+        args.warmup_steps = int(t_total * args.warmup_ratio)
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
@@ -499,6 +501,8 @@ def main():
         "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+
+    parser.add_argument("--warmup_ratio", type=float, default=0.1)
 
     parser.add_argument(
         "--fp16",
