@@ -67,6 +67,7 @@ def read_examples_from_ner_file(data_dir, mode):
                 words = line.split()
                 guid_index += 1
                 examples.append(InputExample(guid=guid_index, words=words))
+    return examples
 
 
 
