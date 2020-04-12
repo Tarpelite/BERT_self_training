@@ -285,11 +285,7 @@ def train_f1_f2(args, model_f1, model_f2, train_dataset):
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
     args.num_train_epochs = 1
-    if args.max_steps > 0:
-        t_total = args.max_steps
-        args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps + 1
-    else:
-        t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+    t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
     if args.warmup_ratio > 0:
         args.warmup_steps = int(t_total * args.warmup_ratio)
