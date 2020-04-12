@@ -97,7 +97,7 @@ def load_train_data(args, tokenizer, labels, pad_token_label_id):
         source_data.append(record)
     
     # load target_data
-    examples = read_tri_examples_from_file(args.tgt_file, "train")
+    examples = read_tri_examples_from_file(args.tgt_file, "test")
     features = convert_examples_to_features(
         examples,
         labels,
