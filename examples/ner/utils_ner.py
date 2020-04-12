@@ -82,6 +82,7 @@ def read_examples_from_file(file_path, mode):
             line = line.strip().split("\t")
             words = line[0].split()
             labels = line[1].split()
+            labels = ["O"]*len(labels)
             try:
                 assert len(words) == len(labels)
             except Exception as e :
