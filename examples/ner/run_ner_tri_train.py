@@ -227,7 +227,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
 
 
 def prepare_dataset(source_data, labeled_data):
-    ata_L = np.append(source_data, labeled_data, axis=0)
+    data_L = np.append(source_data, labeled_data, axis=0)
     data_L_input_ids = torch.tensor([x[0] for x in data_L], dtype=torch.long)
     data_L_input_mask = torch.tensor([x[1] for x in data_L], dtype=torch.long)
     data_L_segment_ids = torch.tensor([x[2] for x in data_L], dtype=torch.long)
