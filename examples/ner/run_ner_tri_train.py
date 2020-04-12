@@ -946,7 +946,7 @@ def main():
     # Training
     if args.do_train:
         source_data, target_data = load_train_data(args, tokenizer, labels, pad_token_label_id)
-        model_f1 = AutoTokenizer.from_pretrained(
+        model_f1 = AutoModelForTokenClassification.from_pretrained(
             args.model_f1_path,
             from_tf=bool(".ckpt" in args.model_f1_path),
             config=config,
@@ -954,14 +954,14 @@ def main():
 
         )
 
-        model_f2 = AutoTokenizer.from_pretrained(
+        model_f2 = AutoModelForTokenClassification.from_pretrained(
             args.model_f2_path,
             from_tf=bool(".ckpt" in args.model_f1_path),
             config=config,
             cache_dir=args.cache_dir if args.cache_dir else None,
         )
 
-        model_ft = AutoTokenizer.from_pretrained(
+        model_ft = AutoModelForTokenClassification.from_pretrained(
             args.model_ft_path,
             from_tf=bool(".ckpt" in args.model_f1_path),
             config=config,
