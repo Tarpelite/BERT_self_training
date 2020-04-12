@@ -131,7 +131,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
     np.random.shuffle(all_target_data)
     cand_data = all_target_data[:N_init]
     all_input_ids = torch.tensor([x[0] for x in cand_data], dtype=torch.long)
-    all_input_mask = torch.tensor(x[1] for x in cand_data], dtype=torch.long)
+    all_input_mask = torch.tensor([x][1] for x in cand_data], dtype=torch.long)
     all_segment_ids = torch.tensor([x[2] for x in cand_data], dtype=torch.long)
 
     dataset = TensorDataset(all_input_ids,
@@ -725,12 +725,25 @@ def main():
         help="Model type selected in the list: " + ", ".join(MODEL_TYPES),
     )
     parser.add_argument(
-        "--model_name_or_path",
+        "--model_f1_path",
         default=None,
         type=str,
         required=True,
         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS),
     )
+    parser.add_argument(
+        "--model_f2_path",
+        default=None,
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--model_ft_path",
+        default=None,
+        type=str,
+        required=True
+    )
+
     parser.add_argument(
         "--output_dir",
         default=None,
@@ -738,18 +751,11 @@ def main():
         required=True,
         help="The output directory where the model predictions and checkpoints will be written.",
     )
+    
     parser.add_argument(
-        "--src_pkl",
-        type=str,
-        required=True,
-        help = "format:[input_ids, input_mask, segment_ids, label_ids]"
-    )
-    parser.add_argument(
-        "--tgt_pkl",
+        "--tgt_file",
         type=str,
         default=None,
-         
-
     )
 
     # Other parameters
