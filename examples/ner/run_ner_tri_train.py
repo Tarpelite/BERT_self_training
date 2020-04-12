@@ -146,7 +146,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
     labeled_data = []
     logger.info("***** Running Labelling*****")
 
-    logger.info("  Num examples = %d", len(eval_dataset))
+    logger.info("  Num examples = %d", len(dataset))
     logger.info("  Batch size = %d", args.eval_batch_size)
     eval_loss = 0.0
     nb_eval_steps = 0
