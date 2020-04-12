@@ -43,6 +43,7 @@ from transformers import (
 from utils_ner import convert_examples_to_features, get_labels
 from utils_ner import read_examples_from_ner_file as read_examples_from_file
 from utils_ner import read_examples_from_file as read_tri_examples_from_file
+import pickle
 
 
 try:
@@ -68,8 +69,60 @@ def set_seed(args):
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
-def load_train_data(args):
-    src_examples = read_tri_examples_from_file(args.src_file,)
+def load_train_data(args, tokenizer, labels, pad_token_label_id):
+    # load source data
+    examples = read_examples_from_file(args.data_dir, "train")
+    features = convert_examples_to_features(
+        examples,
+        labels,
+        args.max_seq_length,
+        tokenizer,
+        cls_token_at_end=bool(args.model_type in ["xlnet"]),
+        # xlnet has a cls token at the end
+        cls_token=tokenizer.cls_token,
+        cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
+        sep_token=tokenizer.sep_token,
+        sep_token_extra=bool(args.model_type in ["roberta"]),
+        # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
+        pad_on_left=bool(args.model_type in ["xlnet"]),
+        # pad on the left for xlnet
+        pad_token=tokenizer.pad_token_id,
+        pad_token_segment_id=tokenizer.pad_token_type_id,
+        pad_token_label_id=pad_token_label_id,
+    )
+
+    source_data = []
+    for f in features:
+        record = [f.input_ids, f.input_mask, f.segment_ids, f.label_ids]
+        source_data.append(record)
+    
+    # load target_data
+    examples = read_tri_examples_from_file(args.tgt_file, "train")
+    features = convert_examples_to_features(
+        examples,
+        labels,
+        args.max_seq_length,
+        tokenizer,
+        cls_token_at_end=bool(args.model_type in ["xlnet"]),
+        # xlnet has a cls token at the end
+        cls_token=tokenizer.cls_token,
+        cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
+        sep_token=tokenizer.sep_token,
+        sep_token_extra=bool(args.model_type in ["roberta"]),
+        # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
+        pad_on_left=bool(args.model_type in ["xlnet"]),
+        # pad on the left for xlnet
+        pad_token=tokenizer.pad_token_id,
+        pad_token_segment_id=tokenizer.pad_token_type_id,
+        pad_token_label_id=pad_token_label_id,
+    )
+
+    target_data = []
+    for f in features:
+        record = [f.input_ids, f.input_mask, f.segment_ids]
+        target_data.append(record)
+
+    return source_data, target_data
 
 
 def labelling(args, all_target_data, model_f1, model_f2, N_init):
@@ -279,19 +332,7 @@ def train_f1_f2(args, model_f1, model_f2, train_dataset):
             model_f2, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
         )
     
-    #  # Train!
-    # logger.info("***** Running training *****")
-    # logger.info("  Num examples = %d", len(train_dataset))
-    # logger.info("  Num Epochs = %d", args.num_train_epochs)
-    # logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
-    # logger.info(
-    #     "  Total train batch size (w. parallel, distributed & accumulation) = %d",
-    #     args.train_batch_size
-    #     * args.gradient_accumulation_steps
-    #     * (torch.distributed.get_world_size() if args.local_rank != -1 else 1),
-    # )
-    # logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
-    # logger.info("  Total optimization steps = %d", t_total)
+ 
 
     global_step = 0
     epochs_trained = 0
@@ -697,6 +738,19 @@ def main():
         required=True,
         help="The output directory where the model predictions and checkpoints will be written.",
     )
+    parser.add_argument(
+        "--src_pkl",
+        type=str,
+        required=True,
+        help = "format:[input_ids, input_mask, segment_ids, label_ids]"
+    )
+    parser.add_argument(
+        "--tgt_pkl",
+        type=str,
+        default=None,
+         
+
+    )
 
     # Other parameters
     parser.add_argument(
@@ -881,12 +935,12 @@ def main():
         cache_dir=args.cache_dir if args.cache_dir else None,
         **tokenizer_args,
     )
-    model = AutoModelForTokenClassification.from_pretrained(
-        args.model_name_or_path,
-        from_tf=bool(".ckpt" in args.model_name_or_path),
-        config=config,
-        cache_dir=args.cache_dir if args.cache_dir else None,
-    )
+    # model = AutoModelForTokenClassification.from_pretrained(
+    #     args.model_name_or_path,
+    #     from_tf=bool(".ckpt" in args.model_name_or_path),
+    #     config=config,
+    #     cache_dir=args.cache_dir if args.cache_dir else None,
+    # )
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
@@ -897,9 +951,34 @@ def main():
 
     # Training
     if args.do_train:
-        train_dataset = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode="train")
-        global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
-        logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
+        source_data, target_data = load_train_data(args, tokenizer, labels, pad_token_label_id)
+        model_f1 = AutoTokenizer.from_pretrained(
+            args.model_f1_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
+            cache_dir=args.cache_dir if args.cache_dir else None,
+
+        )
+
+        model_f2 = AutoTokenizer.from_pretrained(
+            args.model_f2_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
+            cache_dir=args.cache_dir if args.cache_dir else None,
+        )
+
+        model_ft = AutoTokenizer.from_pretrained(
+            args.model_ft_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
+            cache_dir=args.cache_dir if args.cache_dir else None,
+        )
+
+        model_f1, model_f2, model_ft = tri_train(args, model_f1, model_f2, model_ft)
+        # train_dataset = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode="train")
+        # global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
+        # logger.info(" global_step = %s, average loss = %s", global_step, tr_loss) 
+        model = model_ft
 
     # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
