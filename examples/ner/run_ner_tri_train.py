@@ -131,7 +131,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
     np.random.shuffle(all_target_data)
     cand_data = all_target_data[:N_init]
     all_input_ids = torch.tensor([x[0] for x in cand_data], dtype=torch.long)
-    all_input_mask = torch.tensor([x][1] for x in cand_data], dtype=torch.long)
+    all_input_mask = torch.tensor([x[1] for x in cand_data], dtype=torch.long)
     all_segment_ids = torch.tensor([x[2] for x in cand_data], dtype=torch.long)
 
     dataset = TensorDataset(all_input_ids,
