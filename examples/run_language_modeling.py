@@ -559,6 +559,7 @@ def main():
     parser.add_argument(
         "--num_train_epochs", default=1.0, type=float, help="Total number of training epochs to perform."
     )
+    parser.add_argument("--warmup_ratio", type=float, default=0.1)
     parser.add_argument(
         "--max_steps",
         default=-1,
