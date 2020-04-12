@@ -182,8 +182,8 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
             all_logits1 = logits1.detach().cpu().numpy()
             all_logits2 = logits2.detach().cpu().numpy()
         else:
-            np.append(all_logits1, logits1.detach().cpu().numpy(), axis=0)
-            np.append(all_logits2, logits2.detach().cpu().numpy(), axis=0)
+            all_logits1 = np.append(all_logits1, logits1.detach().cpu().numpy(), axis=0)
+            all_logits2 = np.append(all_logits2, logits2.detach().cpu().numpy(), axis=0)
 
     
     # do collect
