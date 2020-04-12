@@ -391,21 +391,19 @@ def train_f1_f2(args, model_f1, model_f2, train_dataset):
                 if args.fp16:
                     torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
                 else:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                    torch.nn.utils.clip_grad_norm_(model_f1.parameters(), args.max_grad_norm)
+                    torch.nn.utils.clip_grad_norm_(model_f2.parameters(), args.max_grad_norm)
+                    
 
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
-                model.zero_grad()
+                model_f1.zero_grad()
+                model_f2.zero_grad()
                 global_step += 1
 
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     # Log metrics
-                    if (
-                        args.local_rank == -1 and args.evaluate_during_training
-                    ):  # Only evaluate when single GPU otherwise metrics may not average well
-                        results, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev")
-                        for key, value in results.items():
-                            tb_writer.add_scalar("eval_{}".format(key), value, global_step)
+                  
                     tb_writer.add_scalar("f1_f2_lr", scheduler.get_lr()[0], global_step)
                     tb_writer.add_scalar("f1_f2_loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
                     logging_loss = tr_loss
@@ -942,7 +940,6 @@ def main():
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
-    model.to(args.device)
 
     logger.info("Training/evaluation parameters %s", args)
 
@@ -970,8 +967,11 @@ def main():
             config=config,
             cache_dir=args.cache_dir if args.cache_dir else None,
         )
+        model_f1.to(args.device)
+        model_f2.to(args.device)
+        model_ft.to(args.device)
 
-        model_f1, model_f2, model_ft = tri_train(args, model_f1, model_f2, model_ft)
+        model_f1, model_f2, model_ft = tri_train(args, model_f1, model_f2, model_ft, source_data, target_data)
         # train_dataset = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode="train")
         # global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
         # logger.info(" global_step = %s, average loss = %s", global_step, tr_loss) 
