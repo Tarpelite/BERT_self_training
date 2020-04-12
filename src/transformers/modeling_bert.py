@@ -1581,3 +1581,32 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 #         return outputs
 
 
+@add_start_docstrings(
+    """Bert Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    BERT_START_DOCSTRING,
+)
+
+class BERTTriTraining(nn.Module):
+    def __init__(self, config, fc1_path, fc2_path, fct_path):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.bert_fc1 = BertForTokenClassification.from_pretrained(
+            fc1_path, from_tf=False, config=config, cache_dir=None
+        )
+        self.bert_fc2 = BertForTokenClassification.from_pretrained(
+            fc2_path, from_tf=False, config=config, cache_dir=None
+        )
+        self.bert_fct = BertForTokenClassification.from_pretrained(
+            fct_path, from_tf=False, config=config, cache_dir=None
+        )
+
+    
+    def forward(input_ids, input_mask, segment_ids, label_ids):
+        
+
+
+        
+    
+        

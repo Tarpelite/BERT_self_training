@@ -232,6 +232,9 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
         args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
     else:
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+    
+    if args.warmup_ratio > 0:
+        args.warmup_steps = int(t_total * args.warmup_ratio)
 
     model = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
     model.resize_token_embeddings(len(tokenizer))
@@ -318,7 +321,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     )
     set_seed(args)  # Added here for reproducibility
     for _ in train_iterator:
-        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
+        epoch_iterator = tqdm(train_dataloader, desc="Iter(loss=X.XXX, lr=X.XXXXXXXX)", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
 
             # Skip past any already trained steps if resuming training
@@ -346,6 +349,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
+                epoch_iterator.set_description('Iter (loss=%5.3f) lr=%9.7f' % (loss.item(), scheduler.get_lr()[0]))
                 if args.fp16:
                     torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
                 else:

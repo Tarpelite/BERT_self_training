@@ -29,9 +29,7 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-import pickle
-# from pudb import set_trace
-# set_trace()
+from torch.nn.functional import softmax
 
 from transformers import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
@@ -42,7 +40,9 @@ from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
-from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
+from utils_ner import convert_examples_to_features, get_labels
+from utils_ner import read_examples_from_ner_file as read_examples_from_file
+from utils_ner import read_examples_from_file as read_tri_examples_from_file
 
 
 try:
@@ -68,123 +68,277 @@ def set_seed(args):
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
+def load_train_data(args):
+    src_examples = read_tri_examples_from_file(args.src_file,)
 
-def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
-    """ Train the model """
+
+def labelling(args, all_target_data, model_f1, model_f2, N_init):
+
+    # make target_data_loader
+    np.random.shuffle(all_target_data)
+    cand_data = all_target_data[:N_init]
+    all_input_ids = torch.tensor([x[0] for x in cand_data], dtype=torch.long)
+    all_input_mask = torch.tensor(x[1] for x in cand_data], dtype=torch.long)
+    all_segment_ids = torch.tensor([x[2] for x in cand_data], dtype=torch.long)
+
+    dataset = TensorDataset(all_input_ids,
+    all_input_mask, all_segment_ids)
+
+    eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
+    eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.mini_batch_size)
+
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+    
+    labeled_data = []
+    logger.info("***** Running Labelling*****")
+
+    logger.info("  Num examples = %d", len(eval_dataset))
+    logger.info("  Batch size = %d", args.eval_batch_size)
+    eval_loss = 0.0
+    nb_eval_steps = 0
+    preds = None
+    out_label_ids = None
+    model_f1.eval()
+    model_f2.eval()
+    all_logits1 = []
+    all_logits2 = []
+    choose_index = []
+    for batch in tqdm(eval_dataloader, desc="Evaluating"):
+        batch = tuple(t.to(args.device) for t in batch)
+
+        with torch.no_grad():
+            inputs = {
+                "input_ids": batch[0],
+                "attention_mask":batch[1],
+                "token_type_ids":batch[2]
+            }
+
+            outputs1 = model_f1(**inputs)
+            outputs2 = model_f2(**inputs)
+
+            logits1 = outputs1[0] # [batch_size, seq_len, num_labels]
+            logits2 = outputs2[0]
+
+            logits1 = softmax(logits1, dim=2)
+            logits2 = softmax(logits2, dim=2)
+
+        np.append(all_logits1, logits1.detach().cpu().numpy(), axis=0)
+        np.append(all_logits2, logits2.detach().cpu().numpy(), axis=0)
+
+    
+    # do collect
+    all_preds_max_1 = np.max(all_logits1, axis=2)
+    # [batch_size, seq_len, 1]
+    all_preds_max_2 = np.max(all_logits2, axis=2)
+    # [batch_size, seq_len, 1]
+
+    all_labels_1 = np.argmax(all_logits1, axis=2)
+    all_labels_2 = np.argmax(all_logits2, axis=2)
+    
+
+    assert len(dataset) == len(all_preds_max_1) == len(all_preds_max_2) == len(all_labels_1) == len(all_labels_2)
+
+    labeled_data = []
+    for i in range(len(dataset)):
+        record = cand_data[i]
+
+        max_1 = all_preds_max_1[i]
+        max_2 = all_preds_max_2[i]
+
+        labels_1 = all_labels_1[i]
+        labels_2 = all_labels_2[i]
+        Flag = True
+        for j in range(len(max_1)):
+            if labels_1[j] != labels_2[j]:
+                flag = False
+                break
+            elif max(labels_1[j], labels_2[j]) < args.threshold:
+                flag = False
+                break
+        if not flag:
+            continue
+
+        record.append(labels_1)
+        labeled_data.append(record)
+    
+    logger.info("**** collect labeled data size %s", len(labeled_data))
+
+    return labeled_data
+
+
+def prepare_dataset(source_data, labeled_data):
+    ata_L = np.append(source_data, labeled_data, axis=0)
+    data_L_input_ids = torch.tensor([x[0] for x in data_L], dtype=torch.long)
+    data_L_input_mask = torch.tensor([x[1] for x in data_L], dtype=torch.long)
+    data_L_segment_ids = torch.tensor([x[2] for x in data_L], dtype=torch.long)
+    data_L_labels_ids = torch.tensor([x[3] for x in data_L], dtype=torch.long)
+
+    dataset_L = TensorDataset(data_L_input_ids,
+    data_L_input_mask, data_L_segment_ids, data_L_labels_ids)
+
+
+    data_S_input_ids = torch.tensor([x[0] for x in data_S], dtype=torch.long)
+    data_S_input_mask = torch.tensor([x[1] for x in data_S], dtype=torch.long)
+    data_S_segment_ids = torch.tensor([x[2] for x in data_S_segment_ids], dtype=torch.long)
+    data_S_labels_ids = torch.tensor([x[3] for x in data_S], dtype=torch.long)
+
+    dataset_S = TensorDataset(data_S_input_ids, data_S_input_mask, data_S_segment_ids, data_S_labels_ids)
+
+    data_TL = labeled_data
+
+    data_TL_input_ids = torch.tensor([x[0] for x in data_TL], dtype=torch.long)
+    data_TL_input_mask = torch.tensor([x[1] for x in data_TL], dtype=torch.long)
+    data_TL_segment_ids = torch.tensor([x[2] for x in data_TL], dtype=torch.long)
+    data_TL_labels_ids = torch.tensor([x[3] for x in data_TL], dtype=torch.long)
+
+    dataset_TL =  TensorDataset(data_TL_input_ids, data_TL_input_mask, data_TL_segment_ids, data_TL_labels_ids)
+
+    return dataset_L, dataset_S, dataset_TL
+
+
+def tri_train(args, model_f1, model_f2, model_ft, source_data, target_data):
+
+    Nt = args.N_init
+    labeled_data = labelling(args, target_data, model_f1, model_f2, Nt)
+
+    dataset_L, dataset_S, dataset_TL = prepare_dataset(source_data, labeled_data)
+
+    k_step = args.k_step
+    
+    k_iterator = trange(k_step, desc="k_iter", disable=args.local_rank not in[-1, 0])
+
+
+    for k in k_iterator:
+        epoch_iterator = tqdm(args.iter, desc="Iter")
+        for _ in epoch_iterator:
+            model_f1, model_f2 = train_f1_f2(args, model_f1, model_f2, dataset_L)
+            model_ft = train_ft(args,model_ft, dataset_TL)
+        
+        Nt = int(k/20*len(target_data))
+        labeled_data = labelling(args, target_data, model_f1, model_f2, Nt)
+        dataset_L, dataset_S, dataset_TL = prepare_dataset(source_data, labeled_data)
+    
+    return model_f1, model_f2, model_ft
+
+
+
+def train_f1_f2(args, model_f1, model_f2, train_dataset):
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
-
+    
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
+    args.num_train_epochs = 1
     if args.max_steps > 0:
         t_total = args.max_steps
-        args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
+        args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps + 1
     else:
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
     if args.warmup_ratio > 0:
         args.warmup_steps = int(t_total * args.warmup_ratio)
-    # Prepare optimizer and schedule (linear warmup and decay)
+
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [p for n, p in list(model_f1.named_parameters()) + list(model_f2.named_parameters()) if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
-    ]
+        {"params": [p for n, p in list(model_f1.named_parameters()) + list(model_f2.named_parameters()) if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+    ] 
+
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )
 
-    # Check if saved optimizer or scheduler states exist
-    if os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt")) and os.path.isfile(
-        os.path.join(args.model_name_or_path, "scheduler.pt")
-    ):
-        # Load in optimizer and scheduler states
-        optimizer.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "optimizer.pt")))
-        scheduler.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "scheduler.pt")))
-
+   
     if args.fp16:
         try:
             from apex import amp
         except ImportError:
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-        model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
-
+        [model_f1, model_f2], optimizer = amp.initialize([model_f1, model_f2], optimizer, opt_level=args.fp16_opt_level)
+    
     # multi-gpu training (should be after apex fp16 initialization)
     if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+        model_f1 = torch.nn.DataParallel(model_f1)
+        model_f2 = torch.nn.DataParallel(model_f2)
 
+    
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
+        model_f1 = torch.nn.parallel.DistributedDataParallel(
+            model_f1, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
         )
 
-    # Train!
-    logger.info("***** Running training *****")
-    logger.info("  Num examples = %d", len(train_dataset))
-    logger.info("  Num Epochs = %d", args.num_train_epochs)
-    logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
-    logger.info(
-        "  Total train batch size (w. parallel, distributed & accumulation) = %d",
-        args.train_batch_size
-        * args.gradient_accumulation_steps
-        * (torch.distributed.get_world_size() if args.local_rank != -1 else 1),
-    )
-    logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
-    logger.info("  Total optimization steps = %d", t_total)
+        model_f2 = torch.nn.parallel.DistributedDataParallel(
+            model_f2, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
+        )
+    
+    #  # Train!
+    # logger.info("***** Running training *****")
+    # logger.info("  Num examples = %d", len(train_dataset))
+    # logger.info("  Num Epochs = %d", args.num_train_epochs)
+    # logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
+    # logger.info(
+    #     "  Total train batch size (w. parallel, distributed & accumulation) = %d",
+    #     args.train_batch_size
+    #     * args.gradient_accumulation_steps
+    #     * (torch.distributed.get_world_size() if args.local_rank != -1 else 1),
+    # )
+    # logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
+    # logger.info("  Total optimization steps = %d", t_total)
 
     global_step = 0
     epochs_trained = 0
     steps_trained_in_current_epoch = 0
-    # Check if continuing training from a checkpoint
-    if os.path.exists(args.model_name_or_path):
-        # set global_step to gobal_step of last saved checkpoint from model path
-        try:
-            global_step = int(args.model_name_or_path.split("-")[-1].split("/")[0])
-        except ValueError:
-            global_step = 0
-        epochs_trained = global_step // (len(train_dataloader) // args.gradient_accumulation_steps)
-        steps_trained_in_current_epoch = global_step % (len(train_dataloader) // args.gradient_accumulation_steps)
-
-        logger.info("  Continuing training from checkpoint, will skip to saved global_step")
-        logger.info("  Continuing training from epoch %d", epochs_trained)
-        logger.info("  Continuing training from global step %d", global_step)
-        logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
-
+   
     tr_loss, logging_loss = 0.0, 0.0
-    model.zero_grad()
-    train_iterator = trange(
-        epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]
-    )
-    set_seed(args)  # Added here for reproductibility
-    for _ in train_iterator:
-        epoch_iterator = tqdm(train_dataloader, desc="Iter(loss=X.XXX, lr=X.XXXXXXXX)", disable=args.local_rank not in [-1, 0])
-        for step, batch in enumerate(epoch_iterator):
+    model_f1.zero_grad()
+    model_f2.zero_grad()
 
-            # Skip past any already trained steps if resuming training
+
+    set_seed(args)
+
+    for _ in range(1):
+        epoch_iterator = tqdm(train_dataloader, desc="Iter(loss=X.XXX, lr=X.XXXXXXXX)", disable=args.local_rank not in [-1, 0])
+
+        for step, batch in enumerate(epoch_iterator):
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
                 continue
-
-            model.train()
+                
+            model_f1.train()
+            model_f2.train()
             batch = tuple(t.to(args.device) for t in batch)
-            inputs = {"input_ids": batch[0], "attention_mask": batch[1], "soft_labels": batch[3]}
-            if args.model_type != "distilbert":
-                inputs["token_type_ids"] = (
-                    batch[2] if args.model_type in ["bert", "xlnet"] else None
-                )  # XLM and RoBERTa don"t use segment_ids
 
-            outputs = model(**inputs)
-            loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+            inputs = {
+                "input_ids":batch[0],
+                "attention_mask":batch[1],
+                "token_type_ids":batch[2],
+                "labels":batch[3]
+            }
+
+            outputs1 = model_f1(**inputs)
+            loss1, _ , s1 = outputs1[:3]
+
+            
+            outputs2 = model_f2(**inputs)
+            loss2, _,  s2 = outputs2[:3]
+
+            w1 = model_f1.classifier.weight #[hidden_size, num_labels]
+            w2 = model_f2.classifier.weight.transpose(-1, -2) #[num_labels, hidden_size]
+
+            norm_term = torch.norm(torch.matmul(w1, w2))
+
+            loss = loss1 + loss2 + args.alpha * norm_term
 
             if args.n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu parallel training
+                loss = loss.mean()
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
 
@@ -195,7 +349,6 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                 loss.backward()
 
             tr_loss += loss.item()
-
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 epoch_iterator.set_description('Iter (loss=%5.3f) lr=%9.7f' % (loss.item(), scheduler.get_lr()[0]))
                 if args.fp16:
@@ -216,39 +369,166 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                         results, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev")
                         for key, value in results.items():
                             tb_writer.add_scalar("eval_{}".format(key), value, global_step)
-                    tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
-                    tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
+                    tb_writer.add_scalar("f1_f2_lr", scheduler.get_lr()[0], global_step)
+                    tb_writer.add_scalar("f1_f2_loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
                     logging_loss = tr_loss
 
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-                    model_to_save = (
-                        model.module if hasattr(model, "module") else model
-                    )  # Take care of distributed/parallel training
-                    model_to_save.save_pretrained(output_dir)
-                    tokenizer.save_pretrained(output_dir)
-
-                    torch.save(args, os.path.join(output_dir, "training_args.bin"))
-                    logger.info("Saving model checkpoint to %s", output_dir)
-
-                    torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                    torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
-                    logger.info("Saving optimizer and scheduler states to %s", output_dir)
-
-            if args.max_steps > 0 and global_step > args.max_steps:
-                epoch_iterator.close()
-                break
-        if args.max_steps > 0 and global_step > args.max_steps:
-            train_iterator.close()
-            break
+                    
 
     if args.local_rank in [-1, 0]:
         tb_writer.close()
 
-    return global_step, tr_loss / global_step
+    return model_f1, model_f2
+
+
+def train_ft(args, model_ft, train_dataset):
+    if args.local_rank in [-1, 0]:
+        tb_writer = SummaryWriter()
+    
+    args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
+
+    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+
+    args.num_train_epochs = 1
+
+    if args.max_steps > 0:
+        t_total = args.max_steps 
+        args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps + 1
+    else:
+        t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+    
+    if args.warmup_ratio > 0:
+        args.warmup_steps = int(t_total * args.warmup_ratio)
+    
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in list(model_f1.named_parameters()) + list(model_f2.named_parameters()) if not any(nd in n for nd in no_decay)],
+            "weight_decay": args.weight_decay,
+        },
+        {"params": [p for n, p in list(model_f1.named_parameters()) + list(model_f2.named_parameters()) if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+    ] 
+
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
+    )
+
+    # Check if saved optimizer or scheduler states exist
+    if os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt")) and os.path.isfile(
+        os.path.join(args.model_name_or_path, "scheduler.pt")
+    ):
+        # Load in optimizer and scheduler states
+        optimizer.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "optimizer.pt")))
+        scheduler.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "scheduler.pt")))
+    
+    if args.fp16:
+        try:
+            from apex import amp
+        except ImportError:
+            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        model_ft, optimizer = amp.initialize(model_ft, optimizer, opt_level=args.fp16_opt_level)
+    
+    # multi-gpu training (should be after apex fp16 initialization)
+    if args.n_gpu > 1:
+        model_ft = torch.nn.DataParallel(model_ft)
+    
+    # Distributed training (should be after apex fp16 initialization)
+    if args.local_rank != -1:
+        model_ft = torch.nn.parallel.DistributedDataParallel(
+            model_ft, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
+        )
+    
+
+    # Train ft
+
+    # logger.info("*****  Running training ft ******")
+    # logger.info("  Num examples = %d", len(train_dataset))
+    # logger.info("  Num Epochs = %d", args.num_train_epochs)
+    # logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
+    # logger.info(
+    #     "  Total train batch size (w. parallel, distributed & accumulation) = %d",
+    #     args.train_batch_size
+    #     * args.gradient_accumulation_steps
+    #     * (torch.distributed.get_world_size() if args.local_rank != -1 else 1),
+    # )
+    # logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
+    # logger.info("  Total optimization steps = %d", t_total)
+
+    global_step = 0
+    epochs_trained = 0
+    steps_trained_in_current_epoch = 0
+    tr_loss, logging_loss = 0.0, 0.0
+
+    model_ft.zero_grad()
+    train_iterator = trange(
+        epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]
+    )
+
+    set_seed(args)
+
+    for _ in range(1):
+        epoch_iterator = tqdm(train_dataloader, desc="Iter(loss=X.XXX, lr=X.XXXXXXXX)", disable=args.local_rank not in [-1, 0])
+
+        for step, batch in enumerate(epoch_iterator):
+            model_ft.train()
+            batch = tuple(t.to(args.device) for t in batch)
+
+            inputs = {
+                "input_ids":batch[0],
+                "attention_mask":batch[1],
+                "token_type_ids":batch[2],
+                "labels":batch[3]
+            }
+
+            outputs = model(**inputs)
+            loss = outputs[0]
+
+            if args.n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu 
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
+
+            if args.fp16:
+                with amp.scale_loss(loss, optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                loss.backward()
+            
+            tr_loss += loss.item()
+            if (step + 1) % args.gradient_accumulation_steps == 0:
+                epoch_iterator.set_description('Iter (loss=%5.3f) lr=%9.7f' % (loss.item(), scheduler.get_lr()[0]))
+                if args.fp16:
+                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                else:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+
+                optimizer.step()
+                scheduler.step()  # Update learning rate schedule
+                model_ft.zero_grad()
+                global_step += 1
+
+            if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                    # Log metrics
+                    if (
+                        args.local_rank == -1 and args.evaluate_during_training
+                    ):  # Only evaluate when single GPU otherwise metrics may not average well
+                        results, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev")
+                        for key, value in results.items():
+                            tb_writer.add_scalar("eval_{}".format(key), value, global_step)
+                    tb_writer.add_scalar("ft_lr", scheduler.get_lr()[0], global_step)
+                    tb_writer.add_scalar("ft_loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
+                    logging_loss = tr_loss
+
+                    
+
+    if args.local_rank in [-1, 0]:
+        tb_writer.close()
+
+    return model_ft
+
+
 
 
 def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
@@ -309,9 +589,16 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
             if out_label_ids[i, j] != pad_token_label_id:
                 out_label_list[i].append(label_map[out_label_ids[i][j]])
                 preds_list[i].append(label_map[preds[i][j]])
+    
+    for i in range(len(preds_list)):
+        for j in range(len(preds_list[i])):
+            preds_list[i][j] = preds_list[i][j].split("-")[-1]
+    
+    for i in range(len(out_label_list)):
+        for j in range(len(out_label_list[i])):
+            out_label_list[i][j] = out_label_list[i][j].split("-")[-1]
 
-    print("preds:", preds_list[0])
-    print("labels:", out_label_list[0])
+
     results = {
         "loss": eval_loss,
         "precision": precision_score(out_label_list, preds_list),
@@ -331,29 +618,39 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
-   
-    
-    logger.info("Creating features from dataset file at %s", args.data_dir)
-    examples = read_examples_from_file(args.eval_file, mode)
-    features = convert_examples_to_features(
-        examples,
-        labels,
-        args.max_seq_length,
-        tokenizer,
-        cls_token_at_end=bool(args.model_type in ["xlnet"]),
-        # xlnet has a cls token at the end
-        cls_token=tokenizer.cls_token,
-        cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
-        sep_token=tokenizer.sep_token,
-        sep_token_extra=bool(args.model_type in ["roberta"]),
-        # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
-        pad_on_left=bool(args.model_type in ["xlnet"]),
-        # pad on the left for xlnet
-        pad_token=tokenizer.pad_token_id,
-        pad_token_segment_id=tokenizer.pad_token_type_id,
-        pad_token_label_id=pad_token_label_id,
+    cached_features_file = os.path.join(
+        args.data_dir,
+        "cached_{}_{}_{}".format(
+            mode, list(filter(None, args.model_name_or_path.split("/"))).pop(), str(args.max_seq_length)
+        ),
     )
-   
+    if os.path.exists(cached_features_file) and not args.overwrite_cache:
+        logger.info("Loading features from cached file %s", cached_features_file)
+        features = torch.load(cached_features_file)
+    else:
+        logger.info("Creating features from dataset file at %s", args.data_dir)
+        examples = read_examples_from_file(args.data_dir, mode)
+        features = convert_examples_to_features(
+            examples,
+            labels,
+            args.max_seq_length,
+            tokenizer,
+            cls_token_at_end=bool(args.model_type in ["xlnet"]),
+            # xlnet has a cls token at the end
+            cls_token=tokenizer.cls_token,
+            cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
+            sep_token=tokenizer.sep_token,
+            sep_token_extra=bool(args.model_type in ["roberta"]),
+            # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
+            pad_on_left=bool(args.model_type in ["xlnet"]),
+            # pad on the left for xlnet
+            pad_token=tokenizer.pad_token_id,
+            pad_token_segment_id=tokenizer.pad_token_type_id,
+            pad_token_label_id=pad_token_label_id,
+        )
+        if args.local_rank in [-1, 0]:
+            logger.info("Saving features into cached file %s", cached_features_file)
+            torch.save(features, cached_features_file)
 
     if args.local_rank == 0 and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
@@ -368,8 +665,6 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
     return dataset
 
 
-
-
 def main():
     parser = argparse.ArgumentParser()
 
@@ -378,6 +673,7 @@ def main():
         "--data_dir",
         default=None,
         type=str,
+        required=True,
         help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
     )
     parser.add_argument(
@@ -476,11 +772,6 @@ def main():
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
     parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
-
-    parser.add_argument("--logits_file", type=str, default="")
-    parser.add_argument("--eval_file", type=str, default="")
-    parser.add_argument("--warmup_ratio", type=float, default=0.1)
-
     parser.add_argument(
         "--eval_all_checkpoints",
         action="store_true",
@@ -495,7 +786,7 @@ def main():
     )
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
-   
+    parser.add_argument("--warmup_ratio", type=float, default=0.1)
 
     parser.add_argument(
         "--fp16",
@@ -512,6 +803,7 @@ def main():
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
+    parser.add_argument("--N_init", type=int, default=100, help = "the init size of target set")
     args = parser.parse_args()
 
     if (
@@ -605,17 +897,7 @@ def main():
 
     # Training
     if args.do_train:
-        # train_dataset = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode="train")
-        with open(args.logits_file, "rb") as f:
-            datasets = pickle.load(f)
-        
-        all_input_ids = torch.tensor(datasets[0], dtype=torch.long)
-        all_input_mask = torch.tensor(datasets[1], dtype=torch.long)
-        all_segment_ids = torch.tensor(datasets[2], dtype=torch.long)
-        all_ner_logits = torch.tensor(datasets[3], dtype=torch.float)
-
-        train_dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_ner_logits)
-
+        train_dataset = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode="train")
         global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
