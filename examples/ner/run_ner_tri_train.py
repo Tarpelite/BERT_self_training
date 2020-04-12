@@ -828,6 +828,11 @@ def main():
         default=32,
         type=int
     )
+    parser.add_argument(
+        "--threshold",
+        default=0.95,
+        type=float
+    )
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
