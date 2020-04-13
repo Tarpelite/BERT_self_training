@@ -855,6 +855,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
     parser.add_argument("--warmup_ratio", type=float, default=0.1)
+    parser.add_argument("--k_step", type=int, default=3)
 
     parser.add_argument(
         "--fp16",
