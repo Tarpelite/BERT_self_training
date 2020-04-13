@@ -517,7 +517,7 @@ def train_ft(args, model_ft, train_dataset):
                 "labels":batch[3]
             }
 
-            outputs = model(**inputs)
+            outputs = model_ft(**inputs)
             loss = outputs[0]
 
             if args.n_gpu > 1:
