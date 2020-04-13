@@ -207,7 +207,6 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
 
         labels_1 = all_labels_1[i]
         labels_2 = all_labels_2[i]
-        labels = []
         
         flag = True
         for j in range(len(max_1)):
@@ -221,6 +220,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
             continue
 
         record.append(labels_1)
+        assert len(record[0]) == len(record[1]) == len(record[2]) == len(record[3])
         labeled_data.append(record)
     
     logger.info("**** collect labeled data size %s", len(labeled_data))
@@ -279,6 +279,7 @@ def tri_train(args, model_f1, model_f2, model_ft, source_data, target_data):
         
         Nt = int((k+1)/20*len(target_data))
         labeled_data = labelling(args, target_data, model_f1, model_f2, Nt)
+
         dataset_L, dataset_S, dataset_TL = prepare_dataset(source_data, labeled_data)
     
     return model_f1, model_f2, model_ft
