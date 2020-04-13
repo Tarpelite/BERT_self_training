@@ -289,7 +289,7 @@ def train_f1_f2(args, model_f1, model_f2, train_dataset):
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
     
-    args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
+    args.train_batch_size = args.mini_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
