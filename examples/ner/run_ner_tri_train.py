@@ -207,12 +207,14 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
 
         labels_1 = all_labels_1[i]
         labels_2 = all_labels_2[i]
+        labels = []
+        
         Flag = True
         for j in range(len(max_1)):
             if labels_1[j] != labels_2[j]:
                 flag = False
                 break
-            elif max(labels_1[j], labels_2[j]) < args.threshold:
+            elif max(max_1[j], max_2[j]) < args.threshold:
                 flag = False
                 break
         if not flag:
