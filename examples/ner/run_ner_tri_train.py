@@ -242,7 +242,7 @@ def prepare_dataset(source_data, labeled_data):
     data_S = source_data
     data_S_input_ids = torch.tensor([x[0] for x in data_S], dtype=torch.long)
     data_S_input_mask = torch.tensor([x[1] for x in data_S], dtype=torch.long)
-    data_S_segment_ids = torch.tensor([x[2] for x in data_S_segment_ids], dtype=torch.long)
+    data_S_segment_ids = torch.tensor([x[2] for x in data_S], dtype=torch.long)
     data_S_labels_ids = torch.tensor([x[3] for x in data_S], dtype=torch.long)
 
     dataset_S = TensorDataset(data_S_input_ids, data_S_input_mask, data_S_segment_ids, data_S_labels_ids)
