@@ -349,6 +349,8 @@ def train_f1_f2(args, model_f1, model_f2, train_dataset):
 
 
     set_seed(args)
+    logger.info("***** train f1 f2 ******")
+    logger.info("***** Num examples: {} ********".format(len(train_dataset)))
 
     for _ in range(1):
         epoch_iterator = tqdm(train_dataloader, desc="Iter(loss=X.XXX, lr=X.XXXXXXXX)", disable=args.local_rank not in [-1, 0])
