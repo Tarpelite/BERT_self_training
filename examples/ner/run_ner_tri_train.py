@@ -208,7 +208,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
         labels_1 = all_labels_1[i]
         labels_2 = all_labels_2[i]
         
-        flag = True
+        flag = True 
         for j in range(len(max_1)):
             if labels_1[j] != labels_2[j]:
                 flag = False
@@ -223,6 +223,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
         assert len(record[0]) == len(record[1]) == len(record[2]) == len(record[3])
         labeled_data.append(record)
     
+    labeled_data = np.array(labeled_data)
     logger.info("**** collect labeled data size %s", len(labeled_data))
 
     return labeled_data
