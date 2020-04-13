@@ -370,11 +370,11 @@ def train_f1_f2(args, model_f1, model_f2, train_dataset):
             }
 
             outputs1 = model_f1(**inputs)
-            loss1, _ , s1 = outputs1[:3]
+            loss1 = outputs1[0]
 
             
             outputs2 = model_f2(**inputs)
-            loss2, _,  s2 = outputs2[:3]
+            loss2 = outputs2[0]
 
             w1 = model_f1.classifier.weight #[hidden_size, num_labels]
             w2 = model_f2.classifier.weight.transpose(-1, -2) #[num_labels, hidden_size]
