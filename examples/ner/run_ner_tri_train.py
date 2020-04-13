@@ -277,7 +277,7 @@ def tri_train(args, model_f1, model_f2, model_ft, source_data, target_data):
             model_f1, model_f2 = train_f1_f2(args, model_f1, model_f2, dataset_L)
             model_ft = train_ft(args,model_ft, dataset_TL)
         
-        Nt = int(k/20*len(target_data))
+        Nt = int((k+1)/20*len(target_data))
         labeled_data = labelling(args, target_data, model_f1, model_f2, Nt)
         dataset_L, dataset_S, dataset_TL = prepare_dataset(source_data, labeled_data)
     
