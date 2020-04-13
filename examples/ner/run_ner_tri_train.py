@@ -209,7 +209,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
         labels_2 = all_labels_2[i]
         labels = []
         
-        Flag = True
+        flag = True
         for j in range(len(max_1)):
             if labels_1[j] != labels_2[j]:
                 flag = False
@@ -229,6 +229,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
 
 
 def prepare_dataset(source_data, labeled_data):
+
     data_L = np.append(source_data, labeled_data, axis=0)
     data_L_input_ids = torch.tensor([x[0] for x in data_L], dtype=torch.long)
     data_L_input_mask = torch.tensor([x[1] for x in data_L], dtype=torch.long)
@@ -238,7 +239,7 @@ def prepare_dataset(source_data, labeled_data):
     dataset_L = TensorDataset(data_L_input_ids,
     data_L_input_mask, data_L_segment_ids, data_L_labels_ids)
 
-
+    data_S = source_data
     data_S_input_ids = torch.tensor([x[0] for x in data_S], dtype=torch.long)
     data_S_input_mask = torch.tensor([x[1] for x in data_S], dtype=torch.long)
     data_S_segment_ids = torch.tensor([x[2] for x in data_S_segment_ids], dtype=torch.long)
