@@ -307,6 +307,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
         label_ids = batch[3].detach().cpu().numpy()
         label_mask = batch[4].detach().cpu().numpy()
+        logits = logits.detach().cpu().numpy()
 
         tmp_eval_correct, tmp_eval_total = accuracy(logits, label_ids, label_mask)
         tplist = true_and_pred(logits, label_ids, label_mask)
