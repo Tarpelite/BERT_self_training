@@ -722,7 +722,7 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(args.output_dir, **tokenizer_args)
         model = MyBertForTokenClassification.from_pretrained(args.output_dir)
         model.to(args.device)
-        result, predictions = test(args, model, tokenizer, labels, pad_token_label_id, mode="test")
+        result = test(args, model, tokenizer, labels, pad_token_label_id, mode="test")
         # Save results
         output_test_results_file = os.path.join(args.output_dir, "test_results.txt")
         with open(output_test_results_file, "w") as writer:
