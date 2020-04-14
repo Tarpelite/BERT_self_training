@@ -176,7 +176,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
             inputs = {
                 "input_ids": batch[0], 
                 "token_type_ids": batch[1], 
-                "input_mask": batch[2],
+                "attention_mask": batch[2],
                 "masked_lm_labels":batch[3]}
            
 
