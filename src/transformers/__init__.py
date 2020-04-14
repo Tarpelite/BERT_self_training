@@ -181,6 +181,7 @@ if is_torch_available():
         BertForQuestionAnswering,
         # BERTForNER,
         load_tf_weights_in_bert,
+        MyBertForTokenClassification,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_openai import (

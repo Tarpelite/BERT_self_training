@@ -1581,32 +1581,61 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 #         return outputs
 
 
+
 @add_start_docstrings(
     """Bert Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     BERT_START_DOCSTRING,
 )
-
-class BERTTriTraining(nn.Module):
-    def __init__(self, config, fc1_path, fc2_path, fct_path):
+class MyBertForTokenClassification(BertPreTrainedModel):
+    def  __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert_fc1 = BertForTokenClassification.from_pretrained(
-            fc1_path, from_tf=False, config=config, cache_dir=None
-        )
-        self.bert_fc2 = BertForTokenClassification.from_pretrained(
-            fc2_path, from_tf=False, config=config, cache_dir=None
-        )
-        self.bert_fct = BertForTokenClassification.from_pretrained(
-            fct_path, from_tf=False, config=config, cache_dir=None
-        )
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        self.init_weights()
     
-    def forward(input_ids, input_mask, segment_ids, label_ids):
-        
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        soft_labels=None,
+        label_mask = None
+    ):
 
+        outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
-        
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output)
+
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            # Only keep active parts of the loss
+            active_loss = label_mask.view(-1) == 1
+            active_logits = logits.view(-1, self.num_labels)[active_loss]
+            active_labels = labels.view(-1)[active_loss]
+            loss = loss_fct(active_logits, active_labels)
+            return loss
+        else:
+            return logits
+
     
         
