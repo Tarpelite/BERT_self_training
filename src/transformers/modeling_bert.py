@@ -1652,8 +1652,7 @@ class MyBertForMaskedLM(BertPreTrainedModel):
         self.init_weights()
     
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None):
-        sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask,
-                                       output_all_encoded_layers=False)
+        sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask)
         prediction_scores = self.cls(sequence_output)
 
         if masked_lm_labels is not None:
