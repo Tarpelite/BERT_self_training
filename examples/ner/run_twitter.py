@@ -210,10 +210,10 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                     if (
                         args.local_rank == -1 and args.evaluate_during_training
                     ):  # Only evaluate when single GPU otherwise metrics may not average well
-                        if args.supervised_training:
+                    
                             results = test(args, model, tokenizer, labels, pad_token_label_id, mode="test")
-                        else:
-                            results = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="test")
+                        # else:
+                        #     results = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="test")
                     #     for key, value in results.items():
                     #         tb_writer.add_scalar("eval_{}".format(key), value, global_step)
                     # tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
