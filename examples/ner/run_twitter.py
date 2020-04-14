@@ -662,7 +662,7 @@ def main():
             train_examples = processor.get_sep_twitter_train_examples(args.data_dir)
         else:
             train_examples = processor.get_conll_train_examples(args.data_dir)
-        train_features = convert_examples_to_features(train_examples, labels, argas.max_seq_length, tokenizer)
+        train_features = convert_examples_to_features(train_examples, labels, args.max_seq_length, tokenizer)
         all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
