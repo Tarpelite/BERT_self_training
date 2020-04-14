@@ -22,6 +22,7 @@ import pickle
 import numpy as np
 import random
 from torch.utils.data import Dataset
+import torch
 
 logger = logging.getLogger(__name__)
 
