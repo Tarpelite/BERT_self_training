@@ -268,6 +268,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
     eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+    label_map = {v:i for i,v in enumerate(labels)}
 
     # multi-gpu evaluate
     if args.n_gpu > 1:
@@ -311,8 +312,9 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
         tmp_eval_correct, tmp_eval_total = accuracy(logits, label_ids, label_mask)
         tplist = true_and_pred(logits, label_ids, label_mask)
+    
         for trues, preds in tplist:
-            TP, FP, FN = compute_tfpn(trues, preds, labels)
+            TP, FP, FN = compute_tfpn(trues, preds, label_map)
             eval_TP += TP
             eval_FP += FP
             eval_FN += FN
