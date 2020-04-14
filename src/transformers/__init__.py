@@ -182,6 +182,7 @@ if is_torch_available():
         # BERTForNER,
         load_tf_weights_in_bert,
         MyBertForTokenClassification,
+        MyBertForMaskedLM,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_openai import (

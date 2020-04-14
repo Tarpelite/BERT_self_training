@@ -1637,5 +1637,29 @@ class MyBertForTokenClassification(BertPreTrainedModel):
         else:
             return logits
 
+@add_start_docstrings(
+    """Bert Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    BERT_START_DOCSTRING,
+)
+class MyBertForMaskedLM(BertPreTrainedModel):
+    def  __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.bert = BertModel(config)
+        self.cls = BertOnlyMLMHead(config)
+        self.init_weights()
     
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None):
+        sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask,
+                                       output_all_encoded_layers=False)
+        prediction_scores = self.cls(sequence_output)
+
+        if masked_lm_labels is not None:
+            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            return masked_lm_loss
+        else:
+            return prediction_scores
         

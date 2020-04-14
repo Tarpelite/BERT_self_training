@@ -39,8 +39,9 @@ from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
     MyBertForTokenClassification,
+    MyBertForMaskedLM,
 )
-from utils_twitter import *
+from utils_lm import *
 
 
 try:
@@ -174,9 +175,10 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {
                 "input_ids": batch[0], 
-                "attention_mask": batch[1], 
-                "labels": batch[3],
-                "label_mask":batch[4]}
+                "token_type_ids": batch[1], 
+                "input_mask": batch[2],
+                "masked_lm_labels":batch[3]}
+           
 
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
@@ -246,179 +248,6 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
         tb_writer.close()
 
     return global_step, tr_loss / global_step
-
-
-def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
-    eval_examples = args.processor.get_conll_dev_examples(args.data_dir)
-    eval_features = convert_examples_to_features(
-        eval_examples, labels, args.max_seq_length, tokenizer
-    )
-    all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-    all_label_ids = torch.tensor([f.label_ids for f in eval_features], dtype=torch.long)
-    all_label_mask = torch.tensor([f.label_mask for f in eval_features], dtype=torch.long)
-    eval_dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
-
-    args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
-    # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
-    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
-    label_map = {v:i for i,v in enumerate(labels)}
-
-    # multi-gpu evaluate
-    if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
-
-    # Eval!
-    logger.info("***** Running evaluation %s *****", prefix)
-    logger.info("  Num examples = %d", len(eval_dataset))
-    logger.info("  Batch size = %d", args.eval_batch_size)
-    eval_loss = 0.0
-    nb_eval_steps, nb_eval_examples = 0, 0
-    preds = None
-    eval_TP, eval_FP, eval_FN = 0, 0, 0
-    eval_accuracy = 0
-    model.eval()
-    for batch in tqdm(eval_dataloader, desc="Evaluating"):
-        batch = tuple(t.to(args.device) for t in batch)
-
-        with torch.no_grad():
-            inputs = {
-                "input_ids": batch[0], 
-                "attention_mask": batch[1], 
-                "labels": batch[3],
-                "label_mask":batch[4]}
-            if args.model_type != "distilbert":
-                inputs["token_type_ids"] = (
-                    batch[2] if args.model_type in ["bert", "xlnet"] else None
-                )  # XLM and RoBERTa don"t use segment_ids
-            outputs = model(**inputs)
-            tmp_eval_loss, logits = outputs[:2]
-
-            if args.n_gpu > 1:
-                tmp_eval_loss = tmp_eval_loss.mean()  # mean() to average on multi-gpu parallel evaluating
-
-            eval_loss += tmp_eval_loss.item()
-        nb_eval_steps += 1
-
-        label_ids = batch[3].detach().cpu().numpy()
-        label_mask = batch[4].detach().cpu().numpy()
-        logits = logits.detach().cpu().numpy()
-
-        tmp_eval_correct, tmp_eval_total = accuracy(logits, label_ids, label_mask)
-        tplist = true_and_pred(logits, label_ids, label_mask)
-    
-        for trues, preds in tplist:
-            TP, FP, FN = compute_tfpn(trues, preds, label_map)
-            eval_TP += TP
-            eval_FP += FP
-            eval_FN += FN
-        
-        eval_accuracy += tmp_eval_correct
-        nb_eval_examples += tmp_eval_total
-
-        
-
-    eval_loss = eval_loss / nb_eval_steps
-    eval_accuracy = eval_accuracy / nb_eval_examples # micro average
-
-    results = {
-        "loss": eval_loss,
-        "eval_accuracy": eval_accuracy,
-        "eval_f1": compute_f1(eval_TP, eval_FP, eval_FN),
-    }
-
-    logger.info("***** Eval results %s *****", prefix)
-    for key in sorted(results.keys()):
-        logger.info("  %s = %s", key, str(results[key]))
-
-    return results
-
-def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
-    eval_examples = args.processor.get_sep_twitter_test_examples(args.data_dir)
-    eval_features = convert_examples_to_features(
-        eval_examples, labels, args.max_seq_length, tokenizer
-    )
-    all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-    all_label_ids = torch.tensor([f.label_ids for f in eval_features], dtype=torch.long)
-    all_label_mask = torch.tensor([f.label_mask for f in eval_features], dtype=torch.long)
-    eval_dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
-
-    args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
-    # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
-    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
-    label_map = {v:i for i, v in enumerate(labels)}
-    # multi-gpu evaluate
-    if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
-
-    # Eval!
-    logger.info("***** Running evaluation %s *****", prefix)
-    logger.info("  Num examples = %d", len(eval_dataset))
-    logger.info("  Batch size = %d", args.eval_batch_size)
-    eval_loss = 0.0
-    nb_eval_steps, nb_eval_examples = 0,0 
-    preds = None
-    eval_TP, eval_FP, eval_FN = 0, 0, 0
-    eval_accuracy = 0
-    model.eval()
-    for batch in tqdm(eval_dataloader, desc="Evaluating"):
-        batch = tuple(t.to(args.device) for t in batch)
-
-        with torch.no_grad():
-            inputs = {
-                "input_ids": batch[0], 
-                "attention_mask": batch[1], 
-                "labels": batch[3],
-                "label_mask":batch[4]}
-            if args.model_type != "distilbert":
-                inputs["token_type_ids"] = (
-                    batch[2] if args.model_type in ["bert", "xlnet"] else None
-                )  # XLM and RoBERTa don"t use segment_ids
-            outputs = model(**inputs)
-            tmp_eval_loss, logits = outputs[:2]
-
-            if args.n_gpu > 1:
-                tmp_eval_loss = tmp_eval_loss.mean()  # mean() to average on multi-gpu parallel evaluating
-
-            eval_loss += tmp_eval_loss.item()
-        nb_eval_steps += 1
-
-        label_ids = batch[3].detach().cpu().numpy()
-        label_mask = batch[4].detach().cpu().numpy()
-        logits = logits.detach().cpu().numpy()
-
-        tmp_eval_correct, tmp_eval_total = accuracy(logits, label_ids, label_mask)
-        tplist = true_and_pred(logits, label_ids, label_mask)
-        for trues, preds in tplist:
-            TP, FP, FN = compute_tfpn(trues, preds, label_map)
-            eval_TP += TP
-            eval_FP += FP
-            eval_FN += FN
-        
-        eval_accuracy += tmp_eval_correct
-        nb_eval_examples += tmp_eval_total
-
-        
-
-    eval_loss = eval_loss / nb_eval_steps
-    eval_accuracy = eval_accuracy / nb_eval_examples # micro average
-
-    results = {
-        "loss": eval_loss,
-        "eval_accuracy": eval_accuracy,
-        "eval_f1": compute_f1(eval_TP, eval_FP, eval_FN),
-    }
-
-    logger.info("***** Eval results %s *****", prefix)
-    for key in sorted(results.keys()):
-        logger.info("  %s = %s", key, str(results[key]))
-
-    return results
 
 
 
@@ -568,6 +397,8 @@ def main():
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
+    
+
     args = parser.parse_args()
 
     if (
@@ -646,7 +477,7 @@ def main():
         cache_dir=args.cache_dir if args.cache_dir else None,
         **tokenizer_args,
     )
-    model = MyBertForTokenClassification.from_pretrained(
+    model = MyBertForMaskedLM.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
         config=config,
@@ -662,17 +493,8 @@ def main():
     
     # Training
     if args.do_train:
-        if args.supervised_training:
-            train_examples = processor.get_sep_twitter_train_examples(args.data_dir)
-        else:
-            train_examples = processor.get_conll_train_examples(args.data_dir)
-        train_features = convert_examples_to_features(train_examples, labels, args.max_seq_length, tokenizer)
-        all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_ids for f in train_features], dtype=torch.long)
-        all_label_mask = torch.tensor([f.label_mask for f in train_features], dtype=torch.long)
-        train_dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
+        train_dataset = BERTDataset(args.data_dir, tokenizer, seq_len=args.max_seq_length)
+        
         global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
@@ -694,41 +516,8 @@ def main():
         # Good practice: save your training arguments together with the trained model
         torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
 
-    # Evaluation
-    results = {}
-    if args.do_eval and args.local_rank in [-1, 0]:
-        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, **tokenizer_args)
-        checkpoints = [args.output_dir]
-        if args.eval_all_checkpoints:
-            checkpoints = list(
-                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-            )
-            logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
-        logger.info("Evaluate the following checkpoints: %s", checkpoints)
-        for checkpoint in checkpoints:
-            global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
-            model = MyBertForTokenClassification.from_pretrained(checkpoint)
-            model.to(args.device)
-            result= evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix=global_step)
-            if global_step:
-                result = {"{}_{}".format(global_step, k): v for k, v in result.items()}
-            results.update(result)
-        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
-            for key in sorted(results.keys()):
-                writer.write("{} = {}\n".format(key, str(results[key])))
 
-    if args.do_predict and args.local_rank in [-1, 0]:
-        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, **tokenizer_args)
-        model = MyBertForTokenClassification.from_pretrained(args.output_dir)
-        model.to(args.device)
-        result = test(args, model, tokenizer, labels, pad_token_label_id, mode="test")
-        # Save results
-        output_test_results_file = os.path.join(args.output_dir, "test_results.txt")
-        with open(output_test_results_file, "w") as writer:
-            for key in sorted(result.keys()):
-                writer.write("{} = {}\n".format(key, str(result[key])))
-       
+   
 
     return results
 
