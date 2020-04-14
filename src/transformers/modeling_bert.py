@@ -1633,7 +1633,7 @@ class MyBertForTokenClassification(BertPreTrainedModel):
             active_logits = logits.view(-1, self.num_labels)[active_loss]
             active_labels = labels.view(-1)[active_loss]
             loss = loss_fct(active_logits, active_labels)
-            return loss
+            return loss, logits
         else:
             return logits
 
