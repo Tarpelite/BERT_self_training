@@ -254,6 +254,7 @@ def compute_tfpn(_trues, _preds, label_map):
 def compute_f1(TP, FP, FN):
     P = TP / (TP + FP)
     R = TP / (TP + FN)
+    
     if P + R == 0:
         F1= 0
     else:
