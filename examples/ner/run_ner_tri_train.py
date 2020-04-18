@@ -336,7 +336,8 @@ def train_f1_f2(args, model_f1, model_f2, train_dataset):
                 "input_ids":batch[0],
                 "attention_mask":batch[1],
                 "token_type_ids":batch[2],
-                "labels":batch[3]
+                "labels":batch[3],
+                "label_mask":batch[4]
             }
 
             outputs1 = model_f1(**inputs)
@@ -482,7 +483,8 @@ def train_ft(args, model_ft, train_dataset):
                 "input_ids":batch[0],
                 "attention_mask":batch[1],
                 "token_type_ids":batch[2],
-                "labels":batch[3]
+                "labels":batch[3],
+                "label_mask":batch[4],
             }
 
             outputs = model_ft(**inputs)
@@ -522,7 +524,16 @@ def train_ft(args, model_ft, train_dataset):
 
 
 def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
-    eval_dataset = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode=mode)
+    eval_examples = args.processor.get_conll_dev_examples(args.data_dir)
+    eval_features = convert_examples_to_features(
+        eval_examples, labels, args.max_seq_length, tokenizer
+    )
+    all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+    all_label_ids = torch.tensor([f.label_ids for f in eval_features], dtype=torch.long)
+    all_label_mask = torch.tensor([f.label_mask for f in eval_features], dtype=torch.long)
+    eval_dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
@@ -546,11 +557,13 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
         batch = tuple(t.to(args.device) for t in batch)
 
         with torch.no_grad():
-            inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
-            if args.model_type != "distilbert":
-                inputs["token_type_ids"] = (
-                    batch[2] if args.model_type in ["bert", "xlnet"] else None
-                )  # XLM and RoBERTa don"t use segment_ids
+            inputs = {"input_ids": batch[0], 
+                      "attention_mask": batch[1], 
+                      "token_type_ids":batch[2],
+                      "labels": batch[3],
+                      "label_mask":batch[4]
+                      }
+            
             outputs = model(**inputs)
             tmp_eval_loss, logits = outputs[:2]
 
@@ -559,48 +572,38 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
             eval_loss += tmp_eval_loss.item()
         nb_eval_steps += 1
-        if preds is None:
-            preds = logits.detach().cpu().numpy()
-            out_label_ids = inputs["labels"].detach().cpu().numpy()
-        else:
-            preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-            out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
+        label_ids = batch[3].detach().cpu().numpy()
+        label_mask = batch[4].detach().cpu().numpy()
+        logits = logits.detach().cpu().numpy()
+
+        tmp_eval_correct, tmp_eval_total = accuracy(logits, label_ids, label_mask)
+        tplist = true_and_pred(logits, label_ids, label_mask)
+    
+        for trues, preds in tplist:
+            TP, FP, FN = compute_tfpn(trues, preds, label_map)
+            eval_TP += TP
+            eval_FP += FP
+            eval_FN += FN
+        
+        eval_accuracy += tmp_eval_correct
+        nb_eval_examples += tmp_eval_total
+
+        
 
     eval_loss = eval_loss / nb_eval_steps
-    preds = np.argmax(preds, axis=2)
-
-    label_map = {i: label for i, label in enumerate(labels)}
-
-    out_label_list = [[] for _ in range(out_label_ids.shape[0])]
-    preds_list = [[] for _ in range(out_label_ids.shape[0])]
-
-    for i in range(out_label_ids.shape[0]):
-        for j in range(out_label_ids.shape[1]):
-            if out_label_ids[i, j] != pad_token_label_id:
-                out_label_list[i].append(label_map[out_label_ids[i][j]])
-                preds_list[i].append(label_map[preds[i][j]])
-    
-    for i in range(len(preds_list)):
-        for j in range(len(preds_list[i])):
-            preds_list[i][j] = preds_list[i][j].split("-")[-1]
-    
-    for i in range(len(out_label_list)):
-        for j in range(len(out_label_list[i])):
-            out_label_list[i][j] = out_label_list[i][j].split("-")[-1]
-
+    eval_accuracy = eval_accuracy / nb_eval_examples # micro average
 
     results = {
         "loss": eval_loss,
-        "precision": precision_score(out_label_list, preds_list),
-        "recall": recall_score(out_label_list, preds_list),
-        "f1": f1_score(out_label_list, preds_list),
+        "eval_accuracy": eval_accuracy,
+        "eval_f1": compute_f1(eval_TP, eval_FP, eval_FN),
     }
 
     logger.info("***** Eval results %s *****", prefix)
     for key in sorted(results.keys()):
         logger.info("  %s = %s", key, str(results[key]))
 
-    return results, preds_list
+    return results
 
 
 def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
@@ -1000,9 +1003,7 @@ def main():
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
             model = MyBertForTokenClassification.from_pretrained(checkpoint)
             model.to(args.device)
-            result, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix=global_step)
-            if global_step:
-                result = {"{}_{}".format(global_step, k): v for k, v in result.items()}
+            result = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix=global_step)
             results.update(result)
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
