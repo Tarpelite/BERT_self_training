@@ -550,9 +550,10 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
     logger.info("  Num examples = %d", len(eval_dataset))
     logger.info("  Batch size = %d", args.eval_batch_size)
     eval_loss = 0.0
-    nb_eval_steps = 0
+    nb_eval_steps, nb_eval_examples = 0, 0
     preds = None
-    out_label_ids = None
+    eval_TP, eval_FP, eval_FN = 0, 0, 0
+    eval_accuracy = 0
     model.eval()
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         batch = tuple(t.to(args.device) for t in batch)
