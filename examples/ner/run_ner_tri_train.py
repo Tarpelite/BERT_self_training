@@ -39,10 +39,13 @@ from transformers import (
     AutoModelForTokenClassification,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
+    MyBertForTokenClassification,
 )
-from utils_ner import convert_examples_to_features, get_labels
-from utils_ner import read_examples_from_ner_file as read_examples_from_file
-from utils_ner import read_examples_from_file as read_tri_examples_from_file
+# from utils_ner import convert_examples_to_features, get_labels
+from utils_twitter import *
+
+# from utils_ner import read_examples_from_ner_file as read_examples_from_file
+# from utils_ner import read_examples_from_file as read_tri_examples_from_file
 import pickle
 
 
@@ -50,6 +53,8 @@ try:
     from torch.utils.tensorboard import SummaryWriter
 except ImportError:
     from tensorboardX import SummaryWriter
+
+
 
 from pudb import set_trace
 set_trace()
@@ -73,57 +78,20 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 def load_train_data(args, tokenizer, labels, pad_token_label_id):
-    # load source data
-    examples = read_examples_from_file(args.data_dir, "train")
-    features = convert_examples_to_features(
-        examples,
-        labels,
-        args.max_seq_length,
-        tokenizer,
-        cls_token_at_end=bool(args.model_type in ["xlnet"]),
-        # xlnet has a cls token at the end
-        cls_token=tokenizer.cls_token,
-        cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
-        sep_token=tokenizer.sep_token,
-        sep_token_extra=bool(args.model_type in ["roberta"]),
-        # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
-        pad_on_left=bool(args.model_type in ["xlnet"]),
-        # pad on the left for xlnet
-        pad_token=tokenizer.pad_token_id,
-        pad_token_segment_id=tokenizer.pad_token_type_id,
-        pad_token_label_id=pad_token_label_id,
-    )
+    all_input_ids = torch.tensor([f.input_ids for f in args.source_features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in args.source_features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in args.source_features], dtype=torch.long)
+    all_label_ids = torch.tensor([f.label_ids for f in args.source_features], dtype=torch.long)
+    all_label_mask = torch.tensor([f.label_mask for f in args.source_features], dtype=torch.long)
+    source_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
 
-    source_data = []
-    for f in features:
-        record = [f.input_ids, f.input_mask, f.segment_ids, f.label_ids]
-        source_data.append(record)
+    all_input_ids = torch.tensor([f.input_ids for f in args.target_features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in args.target_features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in args.target_features], dtype=torch.long)
+    all_label_ids = torch.tensor([f.label_ids for f in args.target_features], dtype=torch.long)
+    all_label_mask = torch.tensor([f.label_mask for f in args.target_features], dtype=torch.long)
+    target_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
     
-    # load target_data
-    examples = read_tri_examples_from_file(args.tgt_file, "test")
-    features = convert_examples_to_features(
-        examples,
-        labels,
-        args.max_seq_length,
-        tokenizer,
-        cls_token_at_end=bool(args.model_type in ["xlnet"]),
-        # xlnet has a cls token at the end
-        cls_token=tokenizer.cls_token,
-        cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
-        sep_token=tokenizer.sep_token,
-        sep_token_extra=bool(args.model_type in ["roberta"]),
-        # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
-        pad_on_left=bool(args.model_type in ["xlnet"]),
-        # pad on the left for xlnet
-        pad_token=tokenizer.pad_token_id,
-        pad_token_segment_id=tokenizer.pad_token_type_id,
-        pad_token_label_id=pad_token_label_id,
-    )
-
-    target_data = []
-    for f in features:
-        record = [f.input_ids, f.input_mask, f.segment_ids]
-        target_data.append(record)
 
     return source_data, target_data
 
@@ -133,12 +101,16 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
     # make target_data_loader
     np.random.shuffle(all_target_data)
     cand_data = all_target_data[:N_init]
-    all_input_ids = torch.tensor([x[0] for x in cand_data], dtype=torch.long)
-    all_input_mask = torch.tensor([x[1] for x in cand_data], dtype=torch.long)
-    all_segment_ids = torch.tensor([x[2] for x in cand_data], dtype=torch.long)
+    all_input_ids = torch.tensor([x.input_ids for x in cand_data], dtype=torch.long)
+    all_input_mask = torch.tensor([x.input_mask for x in cand_data], dtype=torch.long)
+    all_segment_ids = torch.tensor([x.segment_ids for x in cand_data], dtype=torch.long)
+    all_label_ids = torch.tensor([x.label_ids for x in cand_data], dtype=torch.long)
+    all_label_mask = torch.tensor([x.label_mask for x in cand_data], dtype=torch.long)
+
 
     dataset = TensorDataset(all_input_ids,
-    all_input_mask, all_segment_ids)
+    all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
+
 
     eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.mini_batch_size)
@@ -165,16 +137,18 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
 
         with torch.no_grad():
             inputs = {
-                "input_ids": batch[0],
-                "attention_mask":batch[1],
-                "token_type_ids":batch[2]
+                "input_ids": batch[0], 
+                "attention_mask": batch[1],
+                "token_type_ids":batch[2], 
+                "labels": batch[3],
+                "label_mask":batch[4]
             }
 
             outputs1 = model_f1(**inputs)
             outputs2 = model_f2(**inputs)
 
-            logits1 = outputs1[0] # [batch_size, seq_len, num_labels]
-            logits2 = outputs2[0]
+            logits1 = outputs1[1] # [batch_size, seq_len, num_labels]
+            logits2 = outputs2[1]
 
             logits1 = softmax(logits1, dim=2)
             logits2 = softmax(logits2, dim=2)
@@ -218,54 +192,46 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
                 break
         if not flag:
             continue
-
-        record.append(labels_1)
-        assert len(record[0]) == len(record[1]) == len(record[2]) == len(record[3])
-        labeled_data.append(record)
-    
-    labeled_data = np.array(labeled_data)
+        
+        assert len(labels_1) == len(cand_data[i].input_ids)
+        cand_data[i].label_ids = labels_1
+        labeled_data.append(cand_data[i])
     logger.info("**** collect labeled data size %s", len(labeled_data))
 
     return labeled_data
 
 
-def prepare_dataset(source_data, labeled_data):
+def prepare_dataset(source_features, labeled_features):
 
-    data_L = np.append(source_data, labeled_data, axis=0)
-    data_L_input_ids = torch.tensor([x[0] for x in data_L], dtype=torch.long)
-    data_L_input_mask = torch.tensor([x[1] for x in data_L], dtype=torch.long)
-    data_L_segment_ids = torch.tensor([x[2] for x in data_L], dtype=torch.long)
-    data_L_labels_ids = torch.tensor([x[3] for x in data_L], dtype=torch.long)
+    features_L = source_features + labeled_features
+    
+    all_input_ids = torch.tensor([f.input_ids for f in features_L], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in features_L], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in features_L], dtype=torch.long)
+    all_label_ids = torch.tensor([f.label_ids for f in features_L], dtype=torch.long)
+    all_label_mask = torch.tensor([f.label_mask for f in features_L], dtype=torch.long)
 
-    dataset_L = TensorDataset(data_L_input_ids,
-    data_L_input_mask, data_L_segment_ids, data_L_labels_ids)
-
-    data_S = source_data
-    data_S_input_ids = torch.tensor([x[0] for x in data_S], dtype=torch.long)
-    data_S_input_mask = torch.tensor([x[1] for x in data_S], dtype=torch.long)
-    data_S_segment_ids = torch.tensor([x[2] for x in data_S], dtype=torch.long)
-    data_S_labels_ids = torch.tensor([x[3] for x in data_S], dtype=torch.long)
-
-    dataset_S = TensorDataset(data_S_input_ids, data_S_input_mask, data_S_segment_ids, data_S_labels_ids)
-
-    data_TL = labeled_data
-
-    data_TL_input_ids = torch.tensor([x[0] for x in data_TL], dtype=torch.long)
-    data_TL_input_mask = torch.tensor([x[1] for x in data_TL], dtype=torch.long)
-    data_TL_segment_ids = torch.tensor([x[2] for x in data_TL], dtype=torch.long)
-    data_TL_labels_ids = torch.tensor([x[3] for x in data_TL], dtype=torch.long)
-
-    dataset_TL =  TensorDataset(data_TL_input_ids, data_TL_input_mask, data_TL_segment_ids, data_TL_labels_ids)
-
-    return dataset_L, dataset_S, dataset_TL
+    dataset_L = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
 
 
-def tri_train(args, model_f1, model_f2, model_ft, source_data, target_data):
+    all_input_ids = torch.tensor([f.input_ids for f in labeled_features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in labeled_features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in labeled_features], dtype=torch.long)
+    all_label_ids = torch.tensor([f.label_ids for f in labeled_features], dtype=torch.long)
+    all_label_mask = torch.tensor([f.label_mask for f in labeled_features], dtype=torch.long)
+
+
+    dataset_TL =  TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
+
+    return dataset_L, dataset_TL
+
+
+def tri_train(args, model_f1, model_f2, model_ft, source_features, target_features):
 
     Nt = args.N_init
-    labeled_data = labelling(args, target_data, model_f1, model_f2, Nt)
+    labeled_features = labelling(args, target_features, model_f1, model_f2, Nt)
 
-    dataset_L, dataset_S, dataset_TL = prepare_dataset(source_data, labeled_data)
+    dataset_L, dataset_TL = prepare_dataset(source_features, labeled_features)
 
     k_step = args.k_step
     
@@ -278,10 +244,10 @@ def tri_train(args, model_f1, model_f2, model_ft, source_data, target_data):
             model_f1, model_f2 = train_f1_f2(args, model_f1, model_f2, dataset_L)
             model_ft = train_ft(args,model_ft, dataset_TL)
         
-        Nt = int((k+1)/20*len(target_data))
-        labeled_data = labelling(args, target_data, model_f1, model_f2, Nt)
+        Nt = int((k+1)/20*len(target_features))
+        labeled_data = labelling(args, target_features, model_f1, model_f2, Nt)
 
-        dataset_L, dataset_S, dataset_TL = prepare_dataset(source_data, labeled_data)
+        dataset_L, dataset_TL = prepare_dataset(source_data, labeled_data)
     
     return model_f1, model_f2, model_ft
 
@@ -912,9 +878,14 @@ def main():
     # Set seed
     set_seed(args)
 
+    processor = DataProcessor()
+    args.processor = processor
+
     # Prepare CONLL-2003 task
-    labels = get_labels(args.labels)
+    labels = processor.get_labels(args.labels)
     num_labels = len(labels)
+
+
     # Use cross entropy ignore index as padding label id so that only real label ids contribute to the loss later
     pad_token_label_id = CrossEntropyLoss().ignore_index
 
@@ -952,8 +923,20 @@ def main():
 
     # Training
     if args.do_train:
-        source_data, target_data = load_train_data(args, tokenizer, labels, pad_token_label_id)
-        model_f1 = AutoModelForTokenClassification.from_pretrained(
+
+        source_examples = processor.get_conll_train_examples(args.data_dir)
+        target_examples = processor.get_sep_twitter_train_examples(args.data_dir)
+        target_examples.extend(processor.get_sep_twitter_test_examples(args.data_dir))
+
+        source_features = convert_examples_to_features(source_examples, labels, args.max_seq_length, tokenizer)
+
+        target_features = convert_examples_to_features(target_examples, labels, args.max_seq_length, tokenizer)
+
+        args.source_features = source_features
+        args.target_features = target_features
+
+        # source_data, target_data = load_train_data(args, tokenizer, labels, pad_token_label_id)
+        model_f1 = MyBertForTokenClassification.from_pretrained(
             args.model_f1_path,
             from_tf=bool(".ckpt" in args.model_f1_path),
             config=config,
@@ -961,14 +944,14 @@ def main():
 
         )
 
-        model_f2 = AutoModelForTokenClassification.from_pretrained(
+        model_f2 = MyBertForTokenClassification.from_pretrained(
             args.model_f2_path,
             from_tf=bool(".ckpt" in args.model_f1_path),
             config=config,
             cache_dir=args.cache_dir if args.cache_dir else None,
         )
 
-        model_ft = AutoModelForTokenClassification.from_pretrained(
+        model_ft = MyBertForTokenClassification.from_pretrained(
             args.model_ft_path,
             from_tf=bool(".ckpt" in args.model_f1_path),
             config=config,
@@ -978,7 +961,7 @@ def main():
         model_f2.to(args.device)
         model_ft.to(args.device)
 
-        model_f1, model_f2, model_ft = tri_train(args, model_f1, model_f2, model_ft, source_data, target_data)
+        model_f1, model_f2, model_ft = tri_train(args, model_f1, model_f2, model_ft, source_features, target_features)
         # train_dataset = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode="train")
         # global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
         # logger.info(" global_step = %s, average loss = %s", global_step, tr_loss) 
@@ -1015,7 +998,7 @@ def main():
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
-            model = AutoModelForTokenClassification.from_pretrained(checkpoint)
+            model = MyBertForTokenClassification.from_pretrained(checkpoint)
             model.to(args.device)
             result, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix=global_step)
             if global_step:
@@ -1028,7 +1011,7 @@ def main():
 
     if args.do_predict and args.local_rank in [-1, 0]:
         tokenizer = AutoTokenizer.from_pretrained(args.output_dir, **tokenizer_args)
-        model = AutoModelForTokenClassification.from_pretrained(args.output_dir)
+        model = MyBertForTokenClassification.from_pretrained(args.output_dir)
         model.to(args.device)
         result, predictions = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="test")
         # Save results
