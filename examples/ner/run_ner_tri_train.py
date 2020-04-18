@@ -471,7 +471,7 @@ def train_ft(args, model_ft, train_dataset):
     )
 
     set_seed(args)
-
+    logger.info("******* train ft *************")
     for _ in range(1):
         epoch_iterator = tqdm(train_dataloader, desc="Iter(loss=X.XXX, lr=X.XXXXXXXX)", disable=args.local_rank not in [-1, 0])
 
