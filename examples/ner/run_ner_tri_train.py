@@ -539,6 +539,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
     eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+    label_map = {v:i for i,v in enumerate(labels)}
 
     # multi-gpu evaluate
     if args.n_gpu > 1:
@@ -656,6 +657,92 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
 
     dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
     return dataset
+
+def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
+    eval_examples = args.processor.get_sep_twitter_test_examples(args.data_dir)
+    eval_features = convert_examples_to_features(
+        eval_examples, labels, args.max_seq_length, tokenizer
+    )
+    all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+    all_label_ids = torch.tensor([f.label_ids for f in eval_features], dtype=torch.long)
+    all_label_mask = torch.tensor([f.label_mask for f in eval_features], dtype=torch.long)
+    eval_dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
+
+    args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
+    # Note that DistributedSampler samples randomly
+    eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+    label_map = {v:i for i, v in enumerate(labels)}
+    # multi-gpu evaluate
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+
+    # Eval!
+    logger.info("***** Running evaluation %s *****", prefix)
+    logger.info("  Num examples = %d", len(eval_dataset))
+    logger.info("  Batch size = %d", args.eval_batch_size)
+    eval_loss = 0.0
+    nb_eval_steps, nb_eval_examples = 0,0 
+    preds = None
+    eval_TP, eval_FP, eval_FN = 0, 0, 0
+    eval_accuracy = 0
+    model.eval()
+    for batch in tqdm(eval_dataloader, desc="Evaluating"):
+        batch = tuple(t.to(args.device) for t in batch)
+
+        with torch.no_grad():
+            inputs = {
+                "input_ids": batch[0], 
+                "attention_mask": batch[1], 
+                "labels": batch[3],
+                "label_mask":batch[4]}
+            if args.model_type != "distilbert":
+                inputs["token_type_ids"] = (
+                    batch[2] if args.model_type in ["bert", "xlnet"] else None
+                )  # XLM and RoBERTa don"t use segment_ids
+            outputs = model(**inputs)
+            tmp_eval_loss, logits = outputs[:2]
+
+            if args.n_gpu > 1:
+                tmp_eval_loss = tmp_eval_loss.mean()  # mean() to average on multi-gpu parallel evaluating
+
+            eval_loss += tmp_eval_loss.item()
+        nb_eval_steps += 1
+
+        label_ids = batch[3].detach().cpu().numpy()
+        label_mask = batch[4].detach().cpu().numpy()
+        logits = logits.detach().cpu().numpy()
+
+        tmp_eval_correct, tmp_eval_total = accuracy(logits, label_ids, label_mask)
+        tplist = true_and_pred(logits, label_ids, label_mask)
+        for trues, preds in tplist:
+            TP, FP, FN = compute_tfpn(trues, preds, label_map)
+            eval_TP += TP
+            eval_FP += FP
+            eval_FN += FN
+        
+        eval_accuracy += tmp_eval_correct
+        nb_eval_examples += tmp_eval_total
+
+        
+
+    eval_loss = eval_loss / nb_eval_steps
+    eval_accuracy = eval_accuracy / nb_eval_examples # micro average
+
+    results = {
+        "loss": eval_loss,
+        "eval_accuracy": eval_accuracy,
+        "eval_f1": compute_f1(eval_TP, eval_FP, eval_FN),
+    }
+
+    logger.info("***** Eval results %s *****", prefix)
+    for key in sorted(results.keys()):
+        logger.info("  %s = %s", key, str(results[key]))
+
+    return results
+
 
 
 def main():
@@ -1014,27 +1101,13 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(args.output_dir, **tokenizer_args)
         model = MyBertForTokenClassification.from_pretrained(args.output_dir)
         model.to(args.device)
-        result, predictions = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="test")
+        result = test(args, model, tokenizer, labels, pad_token_label_id, mode="test")
         # Save results
         output_test_results_file = os.path.join(args.output_dir, "test_results.txt")
         with open(output_test_results_file, "w") as writer:
             for key in sorted(result.keys()):
                 writer.write("{} = {}\n".format(key, str(result[key])))
-        # Save predictions
-        output_test_predictions_file = os.path.join(args.output_dir, "test_predictions.txt")
-        with open(output_test_predictions_file, "w") as writer:
-            with open(os.path.join(args.data_dir, "test.txt"), "r") as f:
-                example_id = 0
-                for line in f:
-                    if line.startswith("-DOCSTART-") or line == "" or line == "\n":
-                        writer.write(line)
-                        if not predictions[example_id]:
-                            example_id += 1
-                    elif predictions[example_id]:
-                        output_line = line.split()[0] + " " + predictions[example_id].pop(0) + "\n"
-                        writer.write(output_line)
-                    else:
-                        logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
+       
 
     return results
 
