@@ -245,9 +245,9 @@ def tri_train(args, model_f1, model_f2, model_ft, source_features, target_featur
             model_ft = train_ft(args,model_ft, dataset_TL)
         
         Nt = int((k+1)/20*len(target_features))
-        labeled_data = labelling(args, target_features, model_f1, model_f2, Nt)
+        labeled_features = labelling(args, target_features, model_f1, model_f2, Nt)
 
-        dataset_L, dataset_TL = prepare_dataset(source_data, labeled_data)
+        dataset_L, dataset_TL = prepare_dataset(source_features, labeled_features)
     
     return model_f1, model_f2, model_ft
 
