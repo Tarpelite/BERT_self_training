@@ -975,6 +975,9 @@ def main():
         args.source_features = source_features
         args.target_features = target_features
 
+        logger.info("**** source examples: {} *******".format(len(source_features)))
+        logger.info("****  target examples: {} *****".format(len(target_features)))
+
         # source_data, target_data = load_train_data(args, tokenizer, labels, pad_token_label_id)
         model_f1 = MyBertForTokenClassification.from_pretrained(
             args.model_f1_path,
