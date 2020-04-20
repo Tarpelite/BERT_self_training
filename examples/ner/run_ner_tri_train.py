@@ -252,7 +252,6 @@ def tri_train(args, model_f1, model_f2, model_ft, source_features, target_featur
                 model_ft.module if hasattr(model_ft, "module") else model_ft
             )  # Take care of distributed/parallel training
             model_to_save.save_pretrained(output_dir)
-            tokenizer.save_pretrained(output_dir)
 
             torch.save(args, os.path.join(output_dir, "training_args.bin"))
             logger.info("Saving model checkpoint to %s", output_dir)
