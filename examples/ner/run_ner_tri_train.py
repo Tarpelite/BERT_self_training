@@ -243,6 +243,8 @@ def tri_train(args, model_f1, model_f2, model_ft, source_features, target_featur
         for _ in epoch_iterator:
             model_f1, model_f2 = train_f1_f2(args, model_f1, model_f2, dataset_L)
             model_ft = train_ft(args,model_ft, dataset_TL)
+
+            result = test(args, model_ft, tokenizer, args.labels, args.pad_token_label_id, mode="test")
         
         Nt = int((k+1)/20*len(target_features))
         labeled_features = labelling(args, target_features, model_f1, model_f2, Nt)
@@ -928,7 +930,8 @@ def main():
 
     # Use cross entropy ignore index as padding label id so that only real label ids contribute to the loss later
     pad_token_label_id = CrossEntropyLoss().ignore_index
-
+    args.labels = labels
+    args.pad_token_label_id = pad_token_label_id
     # Load pretrained model and tokenizer
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
