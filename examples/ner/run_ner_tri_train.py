@@ -971,6 +971,7 @@ def main():
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
+    args.tokenizer = tokenizer
 
     logger.info("Training/evaluation parameters %s", args)
 
