@@ -237,15 +237,26 @@ def tri_train(args, model_f1, model_f2, model_ft, source_features, target_featur
     
     k_iterator = trange(k_step, desc="k_iter", disable=args.local_rank not in[-1, 0])
 
-
+    cnt = 0
     for k in k_iterator:
         epoch_iterator = trange(args.iter, desc="Iter")
         for _ in epoch_iterator:
             model_f1, model_f2 = train_f1_f2(args, model_f1, model_f2, dataset_L)
             model_ft = train_ft(args,model_ft, dataset_TL)
 
-            result = test(args, model_ft, tokenizer, args.labels, args.pad_token_label_id, mode="test")
-        
+            result = test(args, model_ft, args.tokenizer, args.labels, args.pad_token_label_id, mode="test")
+            output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(cnt))
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            model_to_save = (
+                model_ft.module if hasattr(model_ft, "module") else model_ft
+            )  # Take care of distributed/parallel training
+            model_to_save.save_pretrained(output_dir)
+            tokenizer.save_pretrained(output_dir)
+
+            torch.save(args, os.path.join(output_dir, "training_args.bin"))
+            logger.info("Saving model checkpoint to %s", output_dir)
+            cnt += 1
         Nt = int((k+1)/20*len(target_features))
         labeled_features = labelling(args, target_features, model_f1, model_f2, Nt)
 
