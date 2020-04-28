@@ -31,8 +31,8 @@ try:
 except ImportError:
     from tensorboardX import SummaryWriter
 
-import pudb
-pudb.set_trace()
+# import pudb
+# pudb.set_trace()
 
 
 logger = logging.getLogger(__name__)
@@ -668,20 +668,28 @@ def main():
             train_examples = processor.get_superuser_train_examples(args.data_dir)
         else:
             train_examples = processor.get_askubuntu_train_examples(args.data_dir)
-        train_features = convert_examples_to_features(train_examples, labels, args.max_seq_length, tokenizer)
-        all_input_ids_a = torch.tensor([f.input_ids_a for f in train_features], dtype=torch.long)
-        all_input_ids_b = torch.tensor([f.input_ids_b for f in train_features], dtype=torch.long)
 
-        all_input_mask_a = torch.tensor([f.input_mask_a for f in train_features], dtype=torch.long)
-        all_input_mask_b = torch.tensor([f.input_mask_b for f in train_features])
+        cached_features = os.path.join(args.data_dir, "train_cached.pkl")
+        if os.path.exists(cached_features):
+            with open(cached_features, "rb") as f:
+                train_features = pickle.load(f)
+        else:
+            train_features = convert_examples_to_features(train_examples, labels, args.max_seq_length, tokenizer)
+            all_input_ids_a = torch.tensor([f.input_ids_a for f in train_features], dtype=torch.long)
+            all_input_ids_b = torch.tensor([f.input_ids_b for f in train_features], dtype=torch.long)
 
-        all_segment_ids_a = torch.tensor([f.segment_ids_a for f in train_features], dtype=torch.long)
-        all_segment_ids_b = torch.tensor([f.segment_ids_b for f in train_features], dtype=torch.long)
+            all_input_mask_a = torch.tensor([f.input_mask_a for f in train_features], dtype=torch.long)
+            all_input_mask_b = torch.tensor([f.input_mask_b for f in train_features])
+
+            all_segment_ids_a = torch.tensor([f.segment_ids_a for f in train_features], dtype=torch.long)
+            all_segment_ids_b = torch.tensor([f.segment_ids_b for f in train_features], dtype=torch.long)
 
 
-        all_label_ids = torch.tensor([f.label_ids for f in train_features], dtype=torch.long)
-    
-        train_dataset = TensorDataset(all_input_ids_a, all_input_ids_b,  all_input_mask_a, all_input_mask_b,  all_segment_ids_a, all_segment_ids_b, all_label_ids)
+            all_label_ids = torch.tensor([f.label_ids for f in train_features], dtype=torch.long)
+        
+            train_dataset = TensorDataset(all_input_ids_a, all_input_ids_b,  all_input_mask_a, all_input_mask_b,  all_segment_ids_a, all_segment_ids_b, all_label_ids)
+            with open(cached_features, "wb") as f:
+                pickle.dump(train_features, f, protocol=4)
 
         global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
