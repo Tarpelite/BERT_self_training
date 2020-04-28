@@ -1661,4 +1661,65 @@ class MyBertForMaskedLM(BertPreTrainedModel):
             return masked_lm_loss,prediction_scores
         else:
             return prediction_scores
-        
+
+@add_start_docstrings(
+    """Bert Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    the pooled output) e.g. for GLUE tasks. """,
+    BERT_START_DOCSTRING,
+)
+class BertForDQD(BertPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels =  config.num_labels
+
+        self.bert = BertModel(config)
+        self.dropout  = nn.Dropout(config.hidden_dropout_prob)
+
+        self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
+
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids_a = None,
+        attention_mask_a = None,
+        token_type_id_a = None,
+        position_ids_a = None,
+        input_ids_b =  None,
+        token_type_ids_b = None,
+        attention_mask_b = None,
+        position_ids_b = None,
+        labels = None):
+
+        outputs_a = self.bert(
+            input_ids_a,
+            attention_mask = attention_mask_a,
+            token_type_id = token_type_id_a,
+            position_ids = position_ids_a,
+        )
+
+        outputs_b = self.bert(
+            input_ids_b,
+            attention_mask_b = attention_mask_b,
+            token_type_ids = token_type_ids_b,
+            position_ids = position_ids_b
+        )
+
+        pooled_output = outputs_a[1]  + outputs_b[1]
+        logits = self.classifier(pooled_output)
+        outputs = (logits)  # add hidden states and attention if they are here
+
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
+
+
+
