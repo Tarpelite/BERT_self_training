@@ -85,7 +85,7 @@ class DataProcessor(object):
         return examples
     
     def get_superuser_test_examples(self, data_dir):
-       cached_path = os.path.join(data_dir, "superuser_test.cache")
+        cached_path = os.path.join(data_dir, "superuser_test.cache")
         if os.path.exists(cached_path):
             return self._read_pkl(cached_path)
         else:
@@ -94,7 +94,7 @@ class DataProcessor(object):
             with open(cached_path, "wb") as f:
                 pickle.dump(examples, f, protocol=4)
         return examples
-    
+
     def get_labels(self, data_dir):
 
         return ["0", "1"]
