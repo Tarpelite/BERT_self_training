@@ -1707,7 +1707,7 @@ class BertForDQD(BertPreTrainedModel):
 
         pooled_output = outputs_a[1]  + outputs_b[1]
         logits = self.classifier(pooled_output)
-        outputs = (logits)  # add hidden states and attention if they are here
+        outputs = logits  # add hidden states and attention if they are here
 
         if labels is not None:
             if self.num_labels == 1:
@@ -1717,7 +1717,7 @@ class BertForDQD(BertPreTrainedModel):
             else:
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            outputs = (loss,) + outputs
+            outputs = (loss, logits) 
 
         return outputs  # (loss), logits, (hidden_states), (attentions)
 
