@@ -1683,7 +1683,7 @@ class BertForDQD(BertPreTrainedModel):
         self,
         input_ids_a = None,
         attention_mask_a = None,
-        token_type_id_a = None,
+        token_type_ids_a = None,
         position_ids_a = None,
         input_ids_b =  None,
         token_type_ids_b = None,
@@ -1694,7 +1694,7 @@ class BertForDQD(BertPreTrainedModel):
         outputs_a = self.bert(
             input_ids_a,
             attention_mask = attention_mask_a,
-            token_type_id = token_type_id_a,
+            token_type_id = token_type_ids_a,
             position_ids = position_ids_a,
         )
 
