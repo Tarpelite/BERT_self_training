@@ -31,7 +31,7 @@ class DataProcessor(object):
 
     def get_askubuntu_train_examples(self, data_dir):
         return self._create_examples(
-        self._read_pkl(os.path.join(data_dir, "askubunbtu_train.pkl")), "askubuntu_train")
+        self._read_pkl(os.path.join(data_dir, "askubuntu_train.pkl")), "askubuntu_train")
     
     def get_askubuntu_dev_examples(self, data_dir):
         return self._create_examples( 
