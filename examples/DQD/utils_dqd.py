@@ -85,6 +85,7 @@ class DataProcessor(object):
                     label = label
                 )
             )
+        return examples
     
     def _read_pkl(self, input_file):
         data = pickle.load(open(input_file, "rb"))
