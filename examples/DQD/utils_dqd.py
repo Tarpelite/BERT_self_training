@@ -32,6 +32,7 @@ class DataProcessor(object):
     def get_askubuntu_train_examples(self, data_dir):
         cached_path = os.path.join(data_dir, "askubuntu_train.cache")
         if os.path.exists(cached_path):
+            logger.info("read examples from cache")
             return self._read_pkl(cached_path)
         else:
             examples = self._create_examples(
