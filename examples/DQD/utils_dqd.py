@@ -30,37 +30,70 @@ class DataProcessor(object):
     '''Processor for the DQD dataset '''
 
     def get_askubuntu_train_examples(self, data_dir):
-        return self._create_examples(
+        cached_path = os.path.join(data_dir, "askubuntu_train.cache")
+        if os.path.exists(cached_path):
+            return self._read_pkl(cached_path)
+        else:
+            examples = self._create_examples(
         self._read_pkl(os.path.join(data_dir, "askubuntu_train.pkl")), "askubuntu_train")
+            with open(cached_path, "wb") as f:
+                pickle.dump(examples, f, protocol=4)
+        return examples
     
     def get_askubuntu_dev_examples(self, data_dir):
-        return self._create_examples( 
-        self._read_pkl(os.path.join(data_dir, "askubuntu_dev.pkl")),
-        "ask_ubuntu_dev")
-    
+        cached_path = os.path.join(data_dir, "askubuntu_dev.cache")
+        if os.path.exists(cached_path):
+            return self._read_pkl(cached_path)
+        else:
+            examples = self._create_examples(
+        self._read_pkl(os.path.join(data_dir, "askubuntu_dev.pkl")), "askubuntu_dev")
+            with open(cached_path, "wb") as f:
+                pickle.dump(examples, f, protocol=4)
+        return examples
+
     def get_askubuntu_test_examples(self, data_dir):
-        return self._create_examples(
-        self._read_pkl(os.path.join(data_dir, "askubuntu_test.pkl")),
-        "ask_ubuntu_test"
-        )
-    
+        cached_path = os.path.join(data_dir, "askubuntu_test.cache")
+        if os.path.exists(cached_path):
+            return self._read_pkl(cached_path)
+        else:
+            examples = self._create_examples(
+        self._read_pkl(os.path.join(data_dir, "askubuntu_test.pkl")), "askubuntu_test")
+            with open(cached_path, "wb") as f:
+                pickle.dump(examples, f, protocol=4)
+        return examples
+
     def get_superuser_train_examples(self, data_dir):
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "superuser_train.pkl")),
-            "apple_train"
-        )
-    
+        cached_path = os.path.join(data_dir, "superuser_train.cache")
+        if os.path.exists(cached_path):
+            return self._read_pkl(cached_path)
+        else:
+            examples = self._create_examples(
+        self._read_pkl(os.path.join(data_dir, "superuser_train.pkl")), "superuser_train")
+            with open(cached_path, "wb") as f:
+                pickle.dump(examples, f, protocol=4)
+        return examples
+
     def get_superuser_dev_examples(self, data_dir):
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "superuser_dev.pkl")),
-            "apple_dev"
-        )
+        cached_path = os.path.join(data_dir, "superuser_dev.cache")
+        if os.path.exists(cached_path):
+            return self._read_pkl(cached_path)
+        else:
+            examples = self._create_examples(
+        self._read_pkl(os.path.join(data_dir, "superuser_dev.pkl")), "superuser_dev")
+            with open(cached_path, "wb") as f:
+                pickle.dump(examples, f, protocol=4)
+        return examples
     
     def get_superuser_test_examples(self, data_dir):
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "superuser_test.pkl")),
-            "apple_test"
-        )
+       cached_path = os.path.join(data_dir, "superuser_test.cache")
+        if os.path.exists(cached_path):
+            return self._read_pkl(cached_path)
+        else:
+            examples = self._create_examples(
+        self._read_pkl(os.path.join(data_dir, "superuser_test.pkl")), "superuser_test")
+            with open(cached_path, "wb") as f:
+                pickle.dump(examples, f, protocol=4)
+        return examples
     
     def get_labels(self, data_dir):
 
