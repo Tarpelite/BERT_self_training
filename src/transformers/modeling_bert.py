@@ -1700,7 +1700,7 @@ class BertForDQD(BertPreTrainedModel):
 
         outputs_b = self.bert(
             input_ids_b,
-            attention_mask_b = attention_mask_b,
+            attention_mask = attention_mask_b,
             token_type_ids = token_type_ids_b,
             position_ids = position_ids_b
         )
