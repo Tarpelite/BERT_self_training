@@ -127,10 +127,14 @@ def convert_examples_to_features(
         tokens_a = [cls_token] + title_tokens_a + [sep_token]
         if len(text_tokens_a) > max_seq_length - len(tokens_a) - 1:
             tokens_a += text_tokens_a[:(max_seq_length - len(tokens_a) -1)] + [sep_token]
+        else:
+            tokens_a += text_tokens_a + [sep_token]
         
         tokens_b = [cls_token] + title_tokens_b + [sep_token]
         if len(text_tokens_b) > max_seq_length - len(tokens_b) - 1:
             tokens_b += text_tokens_b[:(max_seq_length - len(tokens_b) -1)] + [sep_token]
+        else:
+            tokens_b += text_tokens_b + [sep_token]
         
         segment_ids_a = [cls_token_segment_id] + [sequence_a_segment_id] * (len(tokens_a) - 1)
         segment_ids_b = [cls_token_segment_id] + [sequence_a_segment_id] * (len(tokens_b) - 1)
