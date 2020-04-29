@@ -25,6 +25,8 @@ from transformers import (
 )
 from utils_dqd import *
 
+from sklearn.metrics import roc_auc_score
+
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -279,6 +281,8 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
     model.eval()
     all_labels = []
     all_preds = []
+    all_false_prob = []
+    softmax = torch.nn.Softmax(dim=-1)
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         batch = tuple(t.to(args.device) for t in batch)
 
@@ -309,21 +313,27 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
         else:
             all_labels = np.append(all_labels, label_ids)
         
+        logits = softmax(logits)
         logits = logits.detach().cpu().numpy()
+        
 
         preds = np.argmax(logits, axis= -1)
 
         if len(all_preds) == 0:
             all_preds = preds
+            false_prob = [x[0] for x in preds]
+            all_false_prob = false_prob
         else:
             all_preds = np.append(all_preds, preds)
-
+            false_prob = [x[0] for x in preds]
+            all_false_prob = np.append(all_false_prob, false_prob)
 
     eval_loss = eval_loss / nb_eval_steps
 
     results = {
         "loss": eval_loss,
         "eval_accuracy": accuracy_score(all_labels, all_preds)
+        "eval_auc@0.05": roc_auc_score(all_labels, all_false_prob, max_fpr=0.05)
     }
 
     logger.info("***** Eval results %s *****", prefix)
