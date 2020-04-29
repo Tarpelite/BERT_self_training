@@ -330,11 +330,11 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
         if len(all_preds) == 0:
             all_preds = preds
-            false_prob = torch.tensor([x[index] for x, index in zip(logits, preds)])
+            false_prob = torch.tensor([x[1] for x, index in zip(logits, preds)])
             auc_meter.add(false_prob, label_ids)
         else:
             all_preds = np.append(all_preds, preds)
-            false_prob = torch.tensor([x[index] for x, index in zip(logits, preds)])
+            false_prob = torch.tensor([x[1] for x, index in zip(logits, preds)])
             auc_meter.add(false_prob, label_ids)
 
 
@@ -441,11 +441,11 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
 
         if len(all_preds) == 0:
             all_preds = preds
-            false_prob = torch.tensor([x[index] for x, index in zip(logits, preds)])
+            false_prob = torch.tensor([x[1] for x, index in zip(logits, preds)])
             auc_meter.add(false_prob, label_ids)
         else:
             all_preds = np.append(all_preds, preds)
-            false_prob = torch.tensor([x[index] for x, index in zip(logits, preds)])
+            false_prob = torch.tensor([x[1] for x, index in zip(logits, preds)])
             auc_meter.add(false_prob, label_ids)
 
 
