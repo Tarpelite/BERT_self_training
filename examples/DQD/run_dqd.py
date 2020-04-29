@@ -242,9 +242,16 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
 
 def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     eval_examples = args.processor.get_askubuntu_dev_examples(args.data_dir)
-    eval_features = convert_examples_to_features(
-        eval_examples, labels, args.max_seq_length, tokenizer
-    )
+    cached_path = os.path.join(args.data_dir, "eval_features.pkl")
+    if os.path.exists(cached_path):
+        with open(cached_path, "rb") as f:
+            eval_features = pickle.load(f)
+    else:
+        eval_features = convert_examples_to_features(
+            eval_examples, labels, args.max_seq_length, tokenizer
+        )
+        with open(cached_path, "wb") as f:
+            pickle.dump(eval_features, f, protocol=4)
     all_input_ids_a = torch.tensor([f.input_ids_a for f in eval_features], dtype=torch.long)
     all_input_ids_b = torch.tensor([f.input_ids_b for f in eval_features], dtype=torch.long)
 
@@ -256,6 +263,8 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
 
     all_label_ids = torch.tensor([f.label_ids for f in eval_features], dtype=torch.long)
+
+    
   
     eval_dataset = TensorDataset(all_input_ids_a, all_input_ids_b,  all_input_mask_a, all_input_mask_b,  all_segment_ids_a, all_segment_ids_b, all_label_ids)
 
@@ -321,11 +330,11 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
         if len(all_preds) == 0:
             all_preds = preds
-            false_prob = [x[0] for x in preds]
+            false_prob = [x[0] for x in logits]
             all_false_prob = false_prob
         else:
             all_preds = np.append(all_preds, preds)
-            false_prob = [x[0] for x in preds]
+            false_prob = [x[0] for x in logits]
             all_false_prob = np.append(all_false_prob, false_prob)
 
     eval_loss = eval_loss / nb_eval_steps
@@ -344,9 +353,16 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
 def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     eval_examples = args.processor.get_superuser_dev_examples(args.data_dir)
-    eval_features = convert_examples_to_features(
-        eval_examples, labels, args.max_seq_length, tokenizer
-    )
+    cached_path = os.path.join(args.data_dir, "test_features.pkl")
+    if os.path.exists(cached_path):
+        with open(cached_path, "rb") as f:
+            eval_features = pickle.load(f)
+    else:
+        eval_features = convert_examples_to_features(
+            eval_examples, labels, args.max_seq_length, tokenizer
+        )
+        with open(cached_path, "wb") as f:
+            pickle.dump(eval_features, f, protocol=4)
     all_input_ids_a = torch.tensor([f.input_ids_a for f in eval_features], dtype=torch.long)
     all_input_ids_b = torch.tensor([f.input_ids_b for f in eval_features], dtype=torch.long)
 
@@ -381,8 +397,10 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     eval_TP, eval_FP, eval_FN = 0, 0, 0
     eval_accuracy = 0
     model.eval()
+    softmax = torch.nn.Softmax(dim=-1)
     all_labels = []
     all_preds = []
+    all_false_prob = []
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         batch = tuple(t.to(args.device) for t in batch)
 
@@ -410,24 +428,30 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
         label_ids = batch[6].detach().cpu().numpy()
         if len(all_labels) == 0:
             all_labels = label_ids
+
         else:
             all_labels = np.append(all_labels, label_ids)
         
         logits = logits.detach().cpu().numpy()
-
+        logits = softmax(logits)
         preds = np.argmax(logits, axis= -1)
 
         if len(all_preds) == 0:
             all_preds = preds
+            false_prob = [x[0] for x in logits]
+            all_false_prob = false_prob
         else:
             all_preds = np.append(all_preds, preds)
+            false_prob = [x[0] for x in logits]
+            all_false_prob = np.append(all_false_prob, false_prob)
 
 
     eval_loss = eval_loss / nb_eval_steps
 
     results = {
         "loss": eval_loss,
-        "eval_accuracy": accuracy_score(all_labels, all_preds)
+        "eval_accuracy": accuracy_score(all_labels, all_preds),
+        "eval_auc@0.05": roc_auc_score(all_labels, all_false_prob, max_fpr=0.05)
     }
 
     logger.info("***** Eval results %s *****", prefix)
