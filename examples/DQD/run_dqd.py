@@ -323,7 +323,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
         else:
             all_labels = np.append(all_labels, label_ids)
         
-        logits = torch.nn.functional.log_softmax(logits)
+        logits = torch.nn.functional.log_softmax(logits, dim=-1)
         logits = logits.detach().cpu().numpy()
         
         preds = np.argmax(logits, axis= -1)
@@ -331,11 +331,11 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
         if len(all_preds) == 0:
             all_preds = preds
             false_prob = torch.tensor([x[index] for x, index in zip(logits, preds)])
-            auc_meter.add(false_prob, labels)
+            auc_meter.add(false_prob, label_ids)
         else:
             all_preds = np.append(all_preds, preds)
             false_prob = torch.tensor([x[index] for x, index in zip(logits, preds)])
-            auc_meter.add(false_prob, labels)
+            auc_meter.add(false_prob, label_ids)
 
 
     eval_loss = eval_loss / nb_eval_steps
@@ -434,7 +434,7 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
         else:
             all_labels = np.append(all_labels, label_ids)
 
-        logits = torch.nn.functional.log_softmax(logits)
+        logits = torch.nn.functional.log_softmax(logits, dim=-1)
         logits = logits.detach().cpu().numpy()
         
         preds = np.argmax(logits, axis= -1)
@@ -442,11 +442,11 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
         if len(all_preds) == 0:
             all_preds = preds
             false_prob = torch.tensor([x[index] for x, index in zip(logits, preds)])
-            auc_meter.add(false_prob, labels)
+            auc_meter.add(false_prob, label_ids)
         else:
             all_preds = np.append(all_preds, preds)
             false_prob = torch.tensor([x[index] for x, index in zip(logits, preds)])
-            auc_meter.add(false_prob, labels)
+            auc_meter.add(false_prob, label_ids)
 
 
     eval_loss = eval_loss / nb_eval_steps
