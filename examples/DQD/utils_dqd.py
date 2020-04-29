@@ -3,8 +3,96 @@ import os
 import pickle
 import numpy as np
 from tqdm import *
+import math
+import numbers
+import numpy as np
+import torch
+
 
 logger = logging.getLogger(__name__)
+
+
+class Meter(object):
+    def reset(self):
+        pass
+    def add(self):
+        pass
+    def value(self):
+        pass
+
+class AUCMeter(Meter):
+    def __init__(self):
+        super(AUCMeter, self).__init__()
+        self.reset()
+    
+    def reset(self):
+        self.scores = torch.DoubleTensor(torch.DoubleStorage()).numpy()
+        self.targets = torch.LongTensor(torch.LongStorage()).numpy()
+
+    def add(self, output, target):
+        if torch.is_tensor(output):
+            output = output.cpu().squeeze().numpy()
+        if torch.is_tensor(target):
+            target = target.cpu().squeeze().numpy()
+        elif isinstance(target, numbers.Number):
+            target = np.asarray([target])
+        assert np.ndim(output) == 1, \
+            'wrong output size (1D expected)'
+        assert np.ndim(target) == 1, \
+            'wrong target size (1D expected)'
+        assert output.shape[0] == target.shape[0], \
+            'number of outputs and targets does not match'
+        assert np.all(np.add(np.equal(target, 1), np.equal(target, 0))), \
+            'targets should be binary (0, 1)'
+
+        self.scores = np.append(self.scores, output)
+        self.targets = np.append(self.targets, target)
+        self.sortind = None
+
+
+    def value(self, max_fpr=1.0):
+        assert max_fpr > 0
+
+        # case when number of elements added are 0
+        if self.scores.shape[0] == 0:
+            return 0.5
+
+        # sorting the arrays
+        if self.sortind is None:
+            scores, sortind = torch.sort(torch.from_numpy(self.scores), dim=0, descending=True)
+            scores = scores.numpy()
+            self.sortind = sortind.numpy()
+        else:
+            scores, sortind = self.scores, self.sortind
+
+        # creating the roc curve
+        tpr = np.zeros(shape=(scores.size + 1), dtype=np.float64)
+        fpr = np.zeros(shape=(scores.size + 1), dtype=np.float64)
+
+        for i in range(1, scores.size + 1):
+            if self.targets[sortind[i - 1]] == 1:
+                tpr[i] = tpr[i - 1] + 1
+                fpr[i] = fpr[i - 1]
+            else:
+                tpr[i] = tpr[i - 1]
+                fpr[i] = fpr[i - 1] + 1
+
+        tpr /= (self.targets.sum() * 1.0)
+        fpr /= ((self.targets - 1.0).sum() * -1.0)
+
+        for n in range(1, scores.size + 1):
+            if fpr[n] >= max_fpr:
+                break
+
+        # calculating area under curve using trapezoidal rule
+        #n = tpr.shape[0]
+        h = fpr[1:n] - fpr[0:n - 1]
+        sum_h = np.zeros(fpr.shape)
+        sum_h[0:n - 1] = h
+        sum_h[1:n] += h
+        area = (sum_h * tpr).sum() / 2.0
+
+        return area / max_fpr
 
 class InputExample(object):
     def __init__(self, guid, title_a, text_a, title_b, text_b, label=None):
