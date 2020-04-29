@@ -332,7 +332,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
     results = {
         "loss": eval_loss,
-        "eval_accuracy": accuracy_score(all_labels, all_preds)
+        "eval_accuracy": accuracy_score(all_labels, all_preds),
         "eval_auc@0.05": roc_auc_score(all_labels, all_false_prob, max_fpr=0.05)
     }
 
