@@ -288,6 +288,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
     eval_TP, eval_FP, eval_FN = 0, 0, 0
     eval_accuracy = 0
     model.eval()
+    auc_meter = AUCMeter()
     all_labels = []
     all_preds = []
     all_false_prob = []
@@ -322,27 +323,27 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
         else:
             all_labels = np.append(all_labels, label_ids)
         
-        logits = softmax(logits)
-        logits = logits.detach().cpu().numpy()
         
-
+        logits = logits.detach().cpu().numpy()
+        logits = torch.nn.functional.log_softmax(logits)
         preds = np.argmax(logits, axis= -1)
 
         if len(all_preds) == 0:
             all_preds = preds
-            false_prob = [x[0] for x in logits]
-            all_false_prob = false_prob
+            false_prob = [x[index] for x, index in zip(logits, preds)]
+            auc_meter.add(false_prob, labels)
         else:
             all_preds = np.append(all_preds, preds)
-            false_prob = [x[0] for x in logits]
-            all_false_prob = np.append(all_false_prob, false_prob)
+            false_prob = [x[index] for x, index in zip(logits, preds)]
+            auc_meter.add(false_prob, labels)
+
 
     eval_loss = eval_loss / nb_eval_steps
 
     results = {
         "loss": eval_loss,
         "eval_accuracy": accuracy_score(all_labels, all_preds),
-        "eval_auc@0.05": roc_auc_score(all_labels, all_false_prob, max_fpr=0.05)
+        "eval_auc@0.05": auc_meter.value(0.05)
     }
 
     logger.info("***** Eval results %s *****", prefix)
