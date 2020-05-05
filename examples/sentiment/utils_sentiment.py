@@ -166,12 +166,13 @@ def convert_examples_to_features(
     label_map = {label:i for i,label in enumerate(label_list)}
 
     features = []
+    all_lens = []
     for (ex_index, example) in enumerate(tqdm(examples)):
         if ex_index % 10000 == 0:
             logger.info("Writing example %d of %d", ex_index, len(examples))
         
         tokens = tokenizer.tokenize(example.text)
-
+        all_lens.append(len(tokens))
         label_id = label_map[example.label]
 
 
@@ -214,6 +215,7 @@ def convert_examples_to_features(
                 segment_ids = segment_ids,
                 label_ids=label_id)
         )
+        logger.info("max_len:{}  min_len:{} avg_len:{}".format(max(all_lens), min(all_lens), sum(all_lens)/len(all_lens)))
     return features
         
 
