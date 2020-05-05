@@ -409,8 +409,9 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     eval_loss = eval_loss / nb_eval_steps
 
     results = {
-        "task": args.taarge_task,
-        "eval_auc@0.05": auc_meter.value(0.05)
+        "task": args.target_task,
+        "loss": eval_loss,
+        "eval_accuracy": accuracy_score(all_labels, all_preds),
     }
 
     logger.info("***** Eval results %s *****", prefix)
