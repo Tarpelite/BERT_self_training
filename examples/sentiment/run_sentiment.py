@@ -663,9 +663,9 @@ def main():
 
     if args.do_train:
         if args.supervised_training:
-            train_examples = processor.get_train_examples(args.data_dir, args.source_task.lower())
-        else:
             train_examples = processor.get_train_examples(args.data_dir, args.target_task.lower())
+        else:
+            train_examples = processor.get_train_examples(args.data_dir, args.source_task.lower())
 
         
         train_features = convert_examples_to_features(train_examples, labels, args.max_seq_length, tokenizer)
