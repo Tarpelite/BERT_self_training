@@ -215,7 +215,7 @@ def convert_examples_to_features(
                 segment_ids = segment_ids,
                 label_ids=label_id)
         )
-        logger.info("max_len:{}  min_len:{} avg_len:{}".format(max(all_lens), min(all_lens), sum(all_lens)/len(all_lens)))
+    logger.info("max_len:{}  min_len:{} avg_len:{}".format(max(all_lens), min(all_lens), sum(all_lens)/len(all_lens)))
     return features
         
 

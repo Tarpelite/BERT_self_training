@@ -297,7 +297,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
         nb_eval_steps += 1
         
         
-        label_ids = batch[6].detach().cpu().numpy()
+        label_ids = batch[3].detach().cpu().numpy()
         if len(all_labels) == 0:
             all_labels = label_ids
         else:
@@ -389,7 +389,7 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
         nb_eval_steps += 1
         
         
-        label_ids = batch[6].detach().cpu().numpy()
+        label_ids = batch[3].detach().cpu().numpy()
         if len(all_labels) == 0:
             all_labels = label_ids
 
