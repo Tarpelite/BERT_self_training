@@ -18,12 +18,12 @@ from transformers import (
     WEIGHTS_NAME,
     AdamW,
     AutoConfig,
-    AutoModelForTokenClassification,
+    AutoModelForSequenceClassification,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
     BertForDQD,
 )
-from utils_dqd import *
+from utils_sentiment import *
 
 from sklearn.metrics import roc_auc_score
 
@@ -159,13 +159,10 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {
-                "input_ids_a": batch[0],
-                "input_ids_b": batch[1],
-                "attention_mask_a":batch[2],
-                "attention_mask_b": batch[3],
-                "token_type_ids_a":batch[4],
-                "token_type_ids_b":batch[5], 
-                "labels": batch[6],
+                "input_ids": batch[0],
+                "attention_mask":batch[1],
+                "token_type_ids":batch[2],
+                "labels": batch[3],
                 }
 
             outputs = model(**inputs)
@@ -243,30 +240,18 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
 def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     eval_examples = args.processor.get_askubuntu_dev_examples(args.data_dir)
     cached_path = os.path.join(args.data_dir, "eval_features.pkl")
-    if os.path.exists(cached_path):
-        with open(cached_path, "rb") as f:
-            eval_features = pickle.load(f)
-    else:
-        eval_features = convert_examples_to_features(
-            eval_examples, labels, args.max_seq_length, tokenizer
-        )
-        with open(cached_path, "wb") as f:
-            pickle.dump(eval_features, f, protocol=4)
-    all_input_ids_a = torch.tensor([f.input_ids_a for f in eval_features], dtype=torch.long)
-    all_input_ids_b = torch.tensor([f.input_ids_b for f in eval_features], dtype=torch.long)
-
-    all_input_mask_a = torch.tensor([f.input_mask_a for f in eval_features], dtype=torch.long)
-    all_input_mask_b = torch.tensor([f.input_mask_b for f in eval_features])
-
-    all_segment_ids_a = torch.tensor([f.segment_ids_a for f in eval_features], dtype=torch.long)
-    all_segment_ids_b = torch.tensor([f.segment_ids_b for f in eval_features], dtype=torch.long)
-
-
+    
+    eval_features = convert_examples_to_features(
+        eval_examples, labels, args.max_seq_length, tokenizer
+    )
+    all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
     all_label_ids = torch.tensor([f.label_ids for f in eval_features], dtype=torch.long)
 
     
   
-    eval_dataset = TensorDataset(all_input_ids_a, all_input_ids_b,  all_input_mask_a, all_input_mask_b,  all_segment_ids_a, all_segment_ids_b, all_label_ids)
+    eval_dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
@@ -288,7 +273,6 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
     eval_TP, eval_FP, eval_FN = 0, 0, 0
     eval_accuracy = 0
     model.eval()
-    auc_meter = AUCMeter()
     all_labels = []
     all_preds = []
     all_false_prob = []
@@ -298,13 +282,10 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
         with torch.no_grad():
             inputs = {
-                "input_ids_a": batch[0],
-                "input_ids_b": batch[1],
-                "attention_mask_a":batch[2],
-                "attention_mask_b": batch[3],
-                "token_type_ids_a":batch[4],
-                "token_type_ids_b":batch[5], 
-                "labels": batch[6],
+                "input_ids": batch[0],
+                "attention_mask":batch[1],
+                "token_type_ids":batch[2],
+                "labels": batch[3],
                 }
 
             outputs = model(**inputs)
@@ -330,20 +311,17 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
         if len(all_preds) == 0:
             all_preds = preds
-            false_prob = torch.tensor([x[1] for x in logits])
-            auc_meter.add(false_prob, label_ids)
         else:
             all_preds = np.append(all_preds, preds)
-            false_prob = torch.tensor([x[1] for x in logits])
-            auc_meter.add(false_prob, label_ids)
+           
 
 
     eval_loss = eval_loss / nb_eval_steps
 
     results = {
+        "task": args.source_task,
         "loss": eval_loss,
         "eval_accuracy": accuracy_score(all_labels, all_preds),
-        "eval_auc@0.05": auc_meter.value(0.05)
     }
 
     logger.info("***** Eval results %s *****", prefix)
@@ -354,29 +332,17 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
 
 def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     eval_examples = args.processor.get_superuser_dev_examples(args.data_dir)
-    cached_path = os.path.join(args.data_dir, "test_features.pkl")
-    if os.path.exists(cached_path):
-        with open(cached_path, "rb") as f:
-            eval_features = pickle.load(f)
-    else:
-        eval_features = convert_examples_to_features(
-            eval_examples, labels, args.max_seq_length, tokenizer
-        )
-        with open(cached_path, "wb") as f:
-            pickle.dump(eval_features, f, protocol=4)
-    all_input_ids_a = torch.tensor([f.input_ids_a for f in eval_features], dtype=torch.long)
-    all_input_ids_b = torch.tensor([f.input_ids_b for f in eval_features], dtype=torch.long)
-
-    all_input_mask_a = torch.tensor([f.input_mask_a for f in eval_features], dtype=torch.long)
-    all_input_mask_b = torch.tensor([f.input_mask_b for f in eval_features])
-
-    all_segment_ids_a = torch.tensor([f.segment_ids_a for f in eval_features], dtype=torch.long)
-    all_segment_ids_b = torch.tensor([f.segment_ids_b for f in eval_features], dtype=torch.long)
-
-
+    
+    eval_features = convert_examples_to_features(
+        eval_examples, labels, args.max_seq_length, tokenizer
+    )
+       
+    all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
     all_label_ids = torch.tensor([f.label_ids for f in eval_features], dtype=torch.long)
   
-    eval_dataset = TensorDataset(all_input_ids_a, all_input_ids_b,  all_input_mask_a, all_input_mask_b,  all_segment_ids_a, all_segment_ids_b, all_label_ids)
+    eval_dataset = TensorDataset(all_input_ids, all_input_mask,  all_segment_ids, all_label_ids)
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
@@ -399,7 +365,7 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     eval_accuracy = 0
     model.eval()
     softmax = torch.nn.Softmax(dim=-1)
-    auc_meter = AUCMeter()
+    
     all_labels = []
     all_preds = []
     all_false_prob = []
@@ -408,13 +374,10 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
 
         with torch.no_grad():
             inputs = {
-                "input_ids_a": batch[0],
-                "input_ids_b": batch[1],
-                "attention_mask_a":batch[2],
-                "attention_mask_b": batch[3],
-                "token_type_ids_a":batch[4],
-                "token_type_ids_b":batch[5], 
-                "labels": batch[6],
+                "input_ids": batch[0],
+                "attention_mask":batch[1],
+                "token_type_ids":batch[2],
+                "labels": batch[3],
                 }
 
             outputs = model(**inputs)
@@ -441,19 +404,13 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
 
         if len(all_preds) == 0:
             all_preds = preds
-            false_prob = torch.tensor([x[0] for x, index in zip(logits, preds)])
-            auc_meter.add(false_prob, label_ids)
         else:
             all_preds = np.append(all_preds, preds)
-            false_prob = torch.tensor([x[0] for x, index in zip(logits, preds)])
-            auc_meter.add(false_prob, label_ids)
-
 
     eval_loss = eval_loss / nb_eval_steps
 
     results = {
-        "loss": eval_loss,
-        "eval_accuracy": accuracy_score(all_labels, all_preds),
+        "task": args.taarge_task,
         "eval_auc@0.05": auc_meter.value(0.05)
     }
 
@@ -609,6 +566,10 @@ def main():
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
+
+    parser.add_argument("--source_task", type=str, default="")
+    parser.add_argument("--target_task", type=str, default="")
+
     args = parser.parse_args()
 
     if (
@@ -686,7 +647,7 @@ def main():
         **tokenizer_args,
     )
 
-    model = BertForDQD.from_pretrained(
+    model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
         config=config,
@@ -702,31 +663,19 @@ def main():
 
     if args.do_train:
         if args.supervised_training:
-            train_examples = processor.get_superuser_train_examples(args.data_dir)
+            train_examples = processor.get_train_examples(args.data_dir, args.source_task.lower())
         else:
-            train_examples = processor.get_askubuntu_train_examples(args.data_dir)
+            train_examples = processor.get_train_examples(args.data_dir, args.target_task.lower())
 
-        cached_features = os.path.join(args.data_dir, "train_cached.pkl")
-        if os.path.exists(cached_features):
-            with open(cached_features, "rb") as f:
-                train_features = pickle.load(f)
-        else:
-            train_features = convert_examples_to_features(train_examples, labels, args.max_seq_length, tokenizer)
-        all_input_ids_a = torch.tensor([f.input_ids_a for f in train_features], dtype=torch.long)
-        all_input_ids_b = torch.tensor([f.input_ids_b for f in train_features], dtype=torch.long)
+        
+        train_features = convert_examples_to_features(train_examples, labels, args.max_seq_length, tokenizer)
+        all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
 
-        all_input_mask_a = torch.tensor([f.input_mask_a for f in train_features], dtype=torch.long)
-        all_input_mask_b = torch.tensor([f.input_mask_b for f in train_features])
-
-        all_segment_ids_a = torch.tensor([f.segment_ids_a for f in train_features], dtype=torch.long)
-        all_segment_ids_b = torch.tensor([f.segment_ids_b for f in train_features], dtype=torch.long)
-
-
+        all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
+        all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
         all_label_ids = torch.tensor([f.label_ids for f in train_features], dtype=torch.long)
     
-        train_dataset = TensorDataset(all_input_ids_a, all_input_ids_b,  all_input_mask_a, all_input_mask_b,  all_segment_ids_a, all_segment_ids_b, all_label_ids)
-        with open(cached_features, "wb") as f:
-            pickle.dump(train_features, f, protocol=4)
+        train_dataset = TensorDataset(all_input_ids, all_input_mask,  all_segment_ids, all_label_ids)
 
         global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
@@ -761,7 +710,7 @@ def main():
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
-            model = BertForDQD.from_pretrained(checkpoint)
+            model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
             model.to(args.device)
             result= evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix=global_step)
             if global_step:
@@ -774,7 +723,7 @@ def main():
 
     if args.do_predict and args.local_rank in [-1, 0]:
         tokenizer = AutoTokenizer.from_pretrained(args.output_dir, **tokenizer_args)
-        model = BertForDQD.from_pretrained(args.output_dir)
+        model = AutoModelForSequenceClassification.from_pretrained(args.output_dir)
         model.to(args.device)
         result = test(args, model, tokenizer, labels, pad_token_label_id, mode="test")
         # Save results
