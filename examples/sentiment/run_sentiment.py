@@ -238,8 +238,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     return global_step, tr_loss / global_step
 
 def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
-    eval_examples = args.processor.get_askubuntu_dev_examples(args.data_dir)
-    cached_path = os.path.join(args.data_dir, "eval_features.pkl")
+    eval_examples = args.processor.get_dev_examples(args.data_dir, args.source_task)
     
     eval_features = convert_examples_to_features(
         eval_examples, labels, args.max_seq_length, tokenizer
@@ -331,7 +330,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
     return results
 
 def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
-    eval_examples = args.processor.get_superuser_dev_examples(args.data_dir)
+    eval_examples = args.processor.get_dev_examples(args.data_dir, args.target_task)
     
     eval_features = convert_examples_to_features(
         eval_examples, labels, args.max_seq_length, tokenizer
