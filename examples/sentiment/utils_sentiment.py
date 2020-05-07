@@ -125,7 +125,7 @@ class DataProcessor(object):
 
     def get_labels(self, data_dir):
 
-        return ["1", "2", "3", "4", "5"]
+        return ["1.0", "2.0", "3.0", "4.0", "5.0"]
     
     def _create_examples(self, data, set_type):
         examples = []
