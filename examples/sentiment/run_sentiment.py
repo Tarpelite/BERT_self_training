@@ -6,6 +6,7 @@ import random
 
 import numpy as np
 import torch
+from sklearn.model_selection import KFold
 from seqeval.metrics import f1_score, precision_score, recall_score, accuracy_score
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
@@ -55,7 +56,7 @@ def set_seed(args):
 
 def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     """ Train the model """
-    if args.local_rank in [-1, 0]:
+    f args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
@@ -158,12 +159,11 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
 
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
-            inputs = {
-                "input_ids": batch[0],
-                "attention_mask":batch[1],
-                "token_type_ids":batch[2],
-                "labels": batch[3],
-                }
+            inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
+            if args.model_type != "distilbert":
+                inputs["token_type_ids"] = (
+                    batch[2] if args.model_type in ["bert", "xlnet"] else None
+                )  # XLM and RoBERTa don"t use segment_ids
 
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
@@ -197,14 +197,11 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                     if (
                         args.local_rank == -1 and args.evaluate_during_training
                     ):  # Only evaluate when single GPU otherwise metrics may not average well
-                    
-                            results = test(args, model, tokenizer, labels, pad_token_label_id, mode="test")
-                        # else:
-                        #     results = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="test")
-                    #     for key, value in results.items():
-                    #         tb_writer.add_scalar("eval_{}".format(key), value, global_step)
-                    # tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
-                    # tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
+                        results, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev")
+                        for key, value in results.items():
+                            tb_writer.add_scalar("eval_{}".format(key), value, global_step)
+                    tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
+                    tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
                     logging_loss = tr_loss
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
@@ -236,6 +233,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
         tb_writer.close()
 
     return global_step, tr_loss / global_step
+    
 
 def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     eval_examples = args.processor.get_dev_examples(args.data_dir, args.source_task)
@@ -248,13 +246,12 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
     all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
     all_label_ids = torch.tensor([f.label_ids for f in eval_features], dtype=torch.long)
 
-    
-  
     eval_dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+
     eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
     label_map = {v:i for i,v in enumerate(labels)}
 
@@ -419,6 +416,8 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
         logger.info("  %s = %s", key, str(results[key]))
 
     return results
+
+
 
 def main():
     parser = argparse.ArgumentParser()
