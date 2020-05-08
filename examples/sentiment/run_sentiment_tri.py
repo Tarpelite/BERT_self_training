@@ -125,7 +125,12 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
     all_labels_1 = np.argmax(all_logits1, axis=1)
     all_labels_2 = np.argmax(all_logits2, axis=1)
 
-        # assert len(dataset) == len(all_preds_max_1) == len(all_preds_max_2) == len(all_labels_1) == len(all_labels_2)
+    try:
+        assert len(dataset) == len(all_preds_max_1) == len(all_preds_max_2) 
+    except Exception as e:
+        print("num of dataset:", len(dataset))
+        print("num of all preds max 1", len(all_preds_max_1))
+        print("num of all preds max 2", len(all_preds_max_2))
 
     labeled_data = []
 
