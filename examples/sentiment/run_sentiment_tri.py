@@ -157,7 +157,7 @@ def prepare_dataset(source_features, labeled_features):
     all_segment_ids = torch.tensor([f.segment_ids for f in features_L], dtype=torch.long)
     all_label_ids = torch.tensor([f.label_ids for f in features_L], dtype=torch.long)
 
-    dataset_L = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
+    dataset_L = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
 
 
     all_input_ids = torch.tensor([f.input_ids for f in labeled_features], dtype=torch.long)
@@ -166,7 +166,7 @@ def prepare_dataset(source_features, labeled_features):
     all_label_ids = torch.tensor([f.label_ids for f in labeled_features], dtype=torch.long)
 
 
-    dataset_TL =  TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
+    dataset_TL =  TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
 
     return dataset_L, dataset_TL
 
