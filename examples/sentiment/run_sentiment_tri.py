@@ -982,7 +982,6 @@ def main():
     parser.add_argument("--source_task", type=str, default="")
     parser.add_argument("--target_task", type=str, default="")
 
-    parser.add_argument("--warmup_ratio", type=float, default=0.1)
     parser.add_argument("--k_step", type=int, default=1)
     parser.add_argument("--iter", type=int, default=1)
     parser.add_argument("--alpha", type=float, default=0.5)
