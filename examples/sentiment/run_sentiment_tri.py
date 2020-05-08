@@ -137,7 +137,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
             labels_1 = all_labels_1[i]
             labels_2 = all_labels_2[i]
 
-            if labels_1 == labels_2 and max(max_1, max_2) >= args.threshold:
+            if labels_1 == labels_2 and max(max_1, max_2) >= args.alpha:
                 record.label_ids = labels_1
                 labeled_data.append(cand_data[i])
         
