@@ -175,6 +175,7 @@ def tri_train(args, model_f1, model_f2, model_ft, source_features, target_featur
     Nt = args.N_init
     labeled_features = labelling(args, target_features, model_f1, model_f2, Nt)
 
+    dataset_L, dataset_TL = prepare_dataset(source_features, labeled_features)
     k_step = args.k_step
     k_iterator = trange(k_step, desc="k_iter", disable=args.local_rank not in[-1, 0])
 
