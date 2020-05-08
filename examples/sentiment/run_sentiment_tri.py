@@ -183,7 +183,7 @@ def tri_train(args, model_f1, model_f2, model_ft, source_features, target_featur
     for k in k_iterator:
         epoch_iterator = trange(args.iter, desc="Iter")
         for _ in epoch_iterator:
-            model_f1, model_f2 = train_f1_f2(args, model_f1, model_f2, dataset_L)
+            # model_f1, model_f2 = train_f1_f2(args, model_f1, model_f2, dataset_L)
             model_ft = train_ft(args,model_ft, dataset_TL)
 
             result = test(args, model_ft, args.tokenizer, args.labels, args.pad_token_label_id, mode="test")
