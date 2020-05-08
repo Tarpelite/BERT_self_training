@@ -110,7 +110,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
             logits2 = softmax(logits2, dim=1)
         if len(all_logits1) == 0:
             all_logits1 = logits1.detach().cpu().numpy()
-            all_logits2 = logits2.detach().cpu()
+            all_logits2 = logits2.detach().cpu().numpy()
         else:
             all_logits1 = np.append(all_logits1, logits1.detach().cpu().numpy(), axis=0)
             all_logits2 = np.append(all_logits2, logits2.detach().cpu().numpy(),
