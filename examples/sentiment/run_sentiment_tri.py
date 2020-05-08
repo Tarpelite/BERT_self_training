@@ -116,8 +116,11 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
             all_logits2 = np.append(all_logits2, logits2.detach().cpu().numpy(),
             axis=0)
         
-        all_preds_max_1 = np.max(all_logits1, axis=1)
-        all_preds_max_2 = np.max(all_logits2, axis=1)
+       # do collect
+        all_preds_max_1 = np.max(all_logits1, axis=-1)
+        # [batch_size, seq_len, 1]
+        all_preds_max_2 = np.max(all_logits2, axis=-1)
+    # [batch_size, seq_len, 1]
 
         all_labels_1 = np.argmax(all_logits1, axis=1)
         all_labels_2 = np.argmax(all_logits2, axis=1)
