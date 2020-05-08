@@ -117,32 +117,32 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
             axis=0)
         
        # do collect
-        all_preds_max_1 = np.max(all_logits1, axis=-1)
-        # [batch_size, seq_len, 1]
-        all_preds_max_2 = np.max(all_logits2, axis=-1)
+    all_preds_max_1 = np.max(all_logits1, axis=-1)
     # [batch_size, seq_len, 1]
+    all_preds_max_2 = np.max(all_logits2, axis=-1)
+# [batch_size, seq_len, 1]
 
-        all_labels_1 = np.argmax(all_logits1, axis=1)
-        all_labels_2 = np.argmax(all_logits2, axis=1)
+    all_labels_1 = np.argmax(all_logits1, axis=1)
+    all_labels_2 = np.argmax(all_logits2, axis=1)
 
         # assert len(dataset) == len(all_preds_max_1) == len(all_preds_max_2) == len(all_labels_1) == len(all_labels_2)
 
-        labeled_data = []
+    labeled_data = []
 
-        for i in range(len(dataset)):
-            record = cand_data[i]
-            max_1 = all_preds_max_1[i]
-            max_2 = all_preds_max_2[i]
+    for i in range(len(dataset)):
+        record = cand_data[i]
+        max_1 = all_preds_max_1[i]
+        max_2 = all_preds_max_2[i]
 
-            labels_1 = all_labels_1[i]
-            labels_2 = all_labels_2[i]
+        labels_1 = all_labels_1[i]
+        labels_2 = all_labels_2[i]
 
-            if labels_1 == labels_2 and max(max_1, max_2) >= args.alpha:
-                record.label_ids = labels_1
-                labeled_data.append(cand_data[i])
-        
-        logger.info("**** collect labeled data size %s", len(labeled_data))
-        return labeled_data
+        if labels_1 == labels_2 and max(max_1, max_2) >= args.alpha:
+            record.label_ids = labels_1
+            labeled_data.append(cand_data[i])
+    
+    logger.info("**** collect labeled data size %s", len(labeled_data))
+    return labeled_data
 
 def prepare_dataset(source_features, labeled_features):
     features_L = source_features + labeled_features
