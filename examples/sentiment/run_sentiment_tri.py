@@ -986,6 +986,7 @@ def main():
     parser.add_argument("--iter", type=int, default=1)
     parser.add_argument("--alpha", type=float, default=0.5)
     parser.add_argument("--N_init", type=int, default=100)
+    parser.add_argument("--mini_batch_size", type=int, default=32)
 
     args = parser.parse_args()
 
