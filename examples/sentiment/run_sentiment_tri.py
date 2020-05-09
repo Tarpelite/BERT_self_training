@@ -717,8 +717,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
         "task": args.source_task,
         "loss": eval_loss,
         "eval_accuracy": accuracy_score(all_labels, all_preds),
-        "eval_recall":recall_score(all_labels, all_preds),
-        "eval_f1":f1_score(all_labels, all_preds)
+        
     }
 
     logger.info("***** Eval results %s *****", prefix)
@@ -810,8 +809,6 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
         "task": args.target_task,
         "loss": eval_loss,
         "eval_accuracy": accuracy_score(all_labels, all_preds),
-        "eval_recall":recall_score(all_labels, all_preds),
-        "eval_f1":f1_score(all_labels, all_preds)
     }
 
     logger.info("***** Eval results %s *****", prefix)
