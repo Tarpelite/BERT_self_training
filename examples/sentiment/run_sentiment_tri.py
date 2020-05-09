@@ -1054,7 +1054,7 @@ def main():
     num_labels = len(labels)
 
     pad_token_label_id = CrossEntropyLoss().ignore_index
-
+    args.pad_token_label_id = pad_token_label_id
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
