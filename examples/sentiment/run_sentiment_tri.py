@@ -816,6 +816,15 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     for key in sorted(results.keys()):
         logger.info("  %s = %s", key, str(results[key]))
 
+    if len(args.result_path) > 0:
+        txt_results = {}
+        import json
+        with open(args.result_path, "w+", encoding="utf-8") as f:
+            txt_results["source_task"] = args.source_task
+            txt_results["target_task"] = results["task"]
+            txt_results["acc"] = results["eval_accuracy"]
+            json.dump(txt_results, f)
+
     return results
 
 
@@ -962,6 +971,7 @@ def main():
 
     parser.add_argument("--warmup_ratio", type=float, default=0.1)
 
+    parser.add_argument("--result_path", type=str, default="")
     parser.add_argument(
         "--fp16",
         action="store_true",
