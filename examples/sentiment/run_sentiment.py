@@ -412,6 +412,14 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
         
     }
 
+    if len(args.result_path) > 0:
+        with open(args.result_path, "w+", encoding="utf-8") as f:
+            txt_results["source_task"] = args.source_task
+            txt_results["target_task"] = results["task"]
+            txt_results["lm_model"] = args.target_task
+            txt_results["acc"] = results["eval_accuracy"]
+            json.dump(txt_results, f)
+
     logger.info("***** Eval results %s *****", prefix)
     for key in sorted(results.keys()):
         logger.info("  %s = %s", key, str(results[key]))
@@ -563,9 +571,12 @@ def main():
         "--finetuned_bert",
         action="store_true"
     )
+    
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
+
+    parser.add_argument("--result_path", type=str, default="")
 
     parser.add_argument("--source_task", type=str, default="")
     parser.add_argument("--target_task", type=str, default="")
