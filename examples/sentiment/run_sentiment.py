@@ -413,6 +413,8 @@ def test(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""):
     }
 
     if len(args.result_path) > 0:
+        txt_results = {}
+        import json
         with open(args.result_path, "w+", encoding="utf-8") as f:
             txt_results["source_task"] = args.source_task
             txt_results["target_task"] = results["task"]
