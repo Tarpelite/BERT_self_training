@@ -251,7 +251,7 @@ def joint_tri_train(args, model_f1, model_f2, model_ft, source_features, target_
     dataset_L, dataset_TL = prepare_dataset(source_features, labeled_features)
     model_ft = train_ft(args,model_ft, dataset_TL)
     result = test(args, model_ft, args.tokenizer, args.labels, args.pad_token_label_id, mode="test")
-        result = evaluate(args, model_ft, args.tokenizer, args.labels, args.pad_token_label_id, mode="test")
+    result = evaluate(args, model_ft, args.tokenizer, args.labels, args.pad_token_label_id, mode="test")
     return model_f1, model_f2, model_ft
     
 
