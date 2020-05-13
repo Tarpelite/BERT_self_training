@@ -235,6 +235,26 @@ def tri_train(args, model_f1, model_f2, model_ft, source_features, target_featur
     
     return model_f1, model_f2, model_ft
 
+def joint_tri_train(args, model_f1, model_f2, model_ft, source_features, target_features):
+    Nt = args.N_init
+
+    all_input_ids = torch.tensor([f.input_ids for f in source_features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in source_features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in source_features], dtype=torch.long)
+    all_label_ids = torch.tensor([f.label_ids for f in source_features], dtype=torch.long)
+
+
+    dataset_S = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+    model_f1, model_f2 = train_f1_f2(args, model_f1, model_f2, dataset_S)
+
+    labeled_features = labelling(args, target_features, model_f1, model_f2, Nt)
+    dataset_L, dataset_TL = prepare_dataset(source_features, labeled_features)
+    model_ft = train_ft(args,model_ft, dataset_TL)
+    result = test(args, model_ft, args.tokenizer, args.labels, args.pad_token_label_id, mode="test")
+        result = evaluate(args, model_ft, args.tokenizer, args.labels, args.pad_token_label_id, mode="test")
+    return model_f1, model_f2, model_ft
+    
+
 def train_f1_f2(args, model_f1, model_f2, train_dataset):
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
@@ -1034,6 +1054,7 @@ def main():
     parser.add_argument("--N_init", type=int, default=100)
     parser.add_argument("--mini_batch_size", type=int, default=32)
     parser.add_argument("--result_dir", type=str, default="")
+    parser.add_argument("--joint_loss", action="store_true")
 
     args = parser.parse_args()
 
@@ -1158,8 +1179,11 @@ def main():
         model_f1.to(args.device)
         model_f2.to(args.device)
         model_ft.to(args.device)
-
-        model_f1, model_f2, model_ft = tri_train(args, model_f1, model_f2, model_ft, source_features, target_features)
+        if args.joint_loss:
+            tri_train_func = joint_tri_train
+        else:
+            tri_train_func = tri_train
+        model_f1, model_f2, model_ft = tri_train_func(args, model_f1, model_f2, model_ft, source_features, target_features)
         model = model_ft
 
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
