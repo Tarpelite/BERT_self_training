@@ -88,6 +88,8 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
     all_logits1 = []
     all_logits2 = []
     choose_index = []
+    all_true_labels = []
+    all_pseudo_labels = []
 
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         batch = tuple(t.to(args.device) for t in batch)
@@ -111,10 +113,13 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
         if len(all_logits1) == 0:
             all_logits1 = logits1.detach().cpu().numpy()
             all_logits2 = logits2.detach().cpu().numpy()
+            all_true_labels = batch[3].detach().cpu().numpy()
+
         else:
             all_logits1 = np.append(all_logits1, logits1.detach().cpu().numpy(), axis=0)
             all_logits2 = np.append(all_logits2, logits2.detach().cpu().numpy(),
             axis=0)
+            all_true_labels = np.append(all_true_labels, batch[3].detach().cpu().numpy(), axis=0)
         
        # do collect
     all_preds_max_1 = np.max(all_logits1, axis=-1)
@@ -134,6 +139,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
 
     labeled_data = []
 
+    all_pseduo_true_labels = []
     for i in range(len(dataset)):
         record = cand_data[i]
         max_1 = all_preds_max_1[i]
@@ -145,7 +151,30 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
         if labels_1 == labels_2 and max(max_1, max_2) >= args.alpha:
             record.label_ids = labels_1
             labeled_data.append(cand_data[i])
+            all_pseudo_labels.append(labels_1)
+            all_pseudo_true_labels.append(all_true_labels[i])
     
+    if len(args.result_dir) > 0:
+        # each line contains true & predict
+        f1_predict_path = os.path.join(args.result_dir, "f1_results.txt")
+        f2_predict_path = os.path.join(args.result_dir, "f2_results.txt")
+        pseudo_predict_path = os.path.join(args.result_dir, "pseudo_labels.txt")
+        with open(f1_predict_path, "w+", encoding="utf-8") as f:
+            assert len(all_true_labels) == len(all_labels_1)
+            for t, p in zip(all_true_labels, all_labels_1):
+                line = str(t) + "\t" + str(p) + "\n"
+                f.write(line)
+        with open(f2_predict_path, "w+", encoding="utf-8") as f:
+            assert len(all_true_labels) == len(all_labels_2)
+            for t, p in zip(all_true_labels, all_labels_2):
+                line = str(t) + "\t" + str(p) + "\n"
+                f.write(line)
+        with open(pseudo_predict_path, "w+", encoding="utf-8") as f:
+            assert len(all_pseduo_true_labels) == all_pseudo_labels
+            for t, p in zip(all_pseudo_true_labels, all_pseudo_labels):
+                line = str(t) + '\t' + str(p) + "\n"
+                f.write(line)
+        
     logger.info("**** collect labeled data size %s", len(labeled_data))
     return labeled_data
 
@@ -1004,6 +1033,7 @@ def main():
     parser.add_argument("--alpha", type=float, default=0.5)
     parser.add_argument("--N_init", type=int, default=100)
     parser.add_argument("--mini_batch_size", type=int, default=32)
+    parser.add_argument("--result_dir", type=str, default="")
 
     args = parser.parse_args()
 
