@@ -139,7 +139,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
 
     labeled_data = []
 
-    all_pseduo_true_labels = []
+    all_pseudo_true_labels = []
     for i in range(len(dataset)):
         record = cand_data[i]
         max_1 = all_preds_max_1[i]
@@ -154,11 +154,11 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
             all_pseudo_labels.append(labels_1)
             all_pseudo_true_labels.append(all_true_labels[i])
     
-    if len(args.result_dir) > 0:
+    if len(args.output_dir) > 0:
         # each line contains true & predict
-        f1_predict_path = os.path.join(args.result_dir, "f1_results.txt")
-        f2_predict_path = os.path.join(args.result_dir, "f2_results.txt")
-        pseudo_predict_path = os.path.join(args.result_dir, "pseudo_labels.txt")
+        f1_predict_path = os.path.join(args.output_dir, "f1_results.txt")
+        f2_predict_path = os.path.join(args.output_dir, "f2_results.txt")
+        pseudo_predict_path = os.path.join(args.output_dir, "pseudo_labels.txt")
         with open(f1_predict_path, "w+", encoding="utf-8") as f:
             assert len(all_true_labels) == len(all_labels_1)
             for t, p in zip(all_true_labels, all_labels_1):
