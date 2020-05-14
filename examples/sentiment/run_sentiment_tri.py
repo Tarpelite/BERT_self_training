@@ -155,6 +155,8 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
             all_pseudo_true_labels.append(all_true_labels[i])
     
     if len(args.output_dir) > 0:
+        if not os.exists(args.output_dir):
+            os.makedirs(args.output_dir)
         # each line contains true & predict
         f1_predict_path = os.path.join(args.output_dir, "f1_results.txt")
         f2_predict_path = os.path.join(args.output_dir, "f2_results.txt")
