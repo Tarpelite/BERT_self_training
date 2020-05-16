@@ -884,7 +884,7 @@ def main():
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
     parser.add_argument("--N_init", type=int, default=100, help = "the init size of target set")
-    parser.add_argument("--joint_loss", type="store_true")
+    parser.add_argument("--joint_loss", action="store_true")
 
     args = parser.parse_args()
 
