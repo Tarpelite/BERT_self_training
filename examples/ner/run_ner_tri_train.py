@@ -884,7 +884,7 @@ def main():
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
     parser.add_argument("--N_init", type=int, default=100, help = "the init size of target set")
-    parser.add_argument("--joint_loss", type="action_store")
+    parser.add_argument("--joint_loss", type="store_true")
 
     args = parser.parse_args()
 
@@ -1035,7 +1035,7 @@ def main():
         
     
         model = model_ft
-        
+
 
     # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
