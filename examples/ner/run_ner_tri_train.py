@@ -263,6 +263,28 @@ def tri_train(args, model_f1, model_f2, model_ft, source_features, target_featur
     
     return model_f1, model_f2, model_ft
 
+def joint_tri_train(args, model_f1, model_f2, model_ft, source_features, target_features):
+
+    Nt = args.N_init
+    features_L = source_features
+    all_input_ids = torch.tensor([f.input_ids for f in features_L], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in features_L], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in features_L], dtype=torch.long)
+    all_label_ids = torch.tensor([f.label_ids for f in features_L], dtype=torch.long)
+    all_label_mask = torch.tensor([f.label_mask for f in features_L], dtype=torch.long)
+
+    dataset_L = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
+
+    model_f1, model_f2 = train_f1_f2(args, model_f1, model_f2, dataset_L)
+
+    labeled_features = labelling(args, target_features, model_f1, model_f2, Nt)
+
+    dataset_L, dataset_TL = prepare_dataset(source_features, labeled_features)
+
+    model_ft = train_ft(args, model_ft, dataset_TL)
+
+    return model_f1, model_f2, model_ft
+
 
 
 def train_f1_f2(args, model_f1, model_f2, train_dataset):
@@ -862,6 +884,8 @@ def main():
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
     parser.add_argument("--N_init", type=int, default=100, help = "the init size of target set")
+    parser.add_argument("--joint_loss", type="action_store")
+
     args = parser.parse_args()
 
     if (
@@ -1002,11 +1026,16 @@ def main():
         model_f2.to(args.device)
         model_ft.to(args.device)
 
-        model_f1, model_f2, model_ft = tri_train(args, model_f1, model_f2, model_ft, source_features, target_features)
-        # train_dataset = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode="train")
-        # global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
-        # logger.info(" global_step = %s, average loss = %s", global_step, tr_loss) 
+        if args.joint_loss:
+            tri_train_func = joint_tri_train
+        else:
+            tri_train_func = tri_train
+
+        model_f1, model_f2, model_ft = tri_train_func(args, model_f1, model_f2, model_ft, source_features, target_features)
+        
+    
         model = model_ft
+        
 
     # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
@@ -1015,15 +1044,13 @@ def main():
             os.makedirs(args.output_dir)
 
         logger.info("Saving model checkpoint to %s", args.output_dir)
-        # Save a trained model, configuration and tokenizer using `save_pretrained()`.
-        # They can then be reloaded using `from_pretrained()`
+ 
         model_to_save = (
             model.module if hasattr(model, "module") else model
         )  # Take care of distributed/parallel training
         model_to_save.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
 
-        # Good practice: save your training arguments together with the trained model
         torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
 
     # Evaluation
@@ -1037,6 +1064,7 @@ def main():
             )
             logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
+
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
             model = MyBertForTokenClassification.from_pretrained(checkpoint)

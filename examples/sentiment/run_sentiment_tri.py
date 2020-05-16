@@ -161,6 +161,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
         f1_predict_path = os.path.join(args.output_dir, "f1_results.txt")
         f2_predict_path = os.path.join(args.output_dir, "f2_results.txt")
         pseudo_predict_path = os.path.join(args.output_dir, "pseudo_labels.txt")
+        num_labels_path = os.path.join(args.output_dir, "num_labels.txt")
         with open(f1_predict_path, "w+", encoding="utf-8") as f:
             assert len(all_true_labels) == len(all_labels_1)
             for t, p in zip(all_true_labels, all_labels_1):
@@ -176,6 +177,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
             for t, p in zip(all_pseudo_true_labels, all_pseudo_labels):
                 line = str(t) + '\t' + str(p) + "\n"
                 f.write(line)
+        
         
     logger.info("**** collect labeled data size %s", len(labeled_data))
     return labeled_data
