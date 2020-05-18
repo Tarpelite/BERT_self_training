@@ -571,6 +571,8 @@ def main():
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
+    
+
     args = parser.parse_args()
 
     if (
@@ -669,6 +671,7 @@ def main():
             train_examples = processor.get_sep_twitter_train_examples(args.data_dir)
         else:
             train_examples = processor.get_conll_train_examples(args.data_dir)
+
         train_features = convert_examples_to_features(train_examples, labels, args.max_seq_length, tokenizer)
         all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
@@ -677,9 +680,10 @@ def main():
         all_label_mask = torch.tensor([f.label_mask for f in train_features], dtype=torch.long)
         train_dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
         global_step, tr_loss = train(args, train_dataset, model, tokenizer, labels, pad_token_label_id)
+
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
-    # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
+        
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         # Create output directory if needed
         if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:

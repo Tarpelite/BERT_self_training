@@ -72,6 +72,10 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     if args.warmup_ratio > 0:
         args.warmup_steps = int(t_total * args.warmup_ratio)
     # Prepare optimizer and schedule (linear warmup and decay)
+    if args.freeze_encoder:
+        for param in model.bert.parameters():
+            param.requires_grad = False
+
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
@@ -574,6 +578,10 @@ def main():
         action="store_true"
     )
     
+    parser.add_argument(
+        "--freeze_encoder",
+        action="store_true"
+    )
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
