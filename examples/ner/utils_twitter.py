@@ -255,10 +255,7 @@ def compute_f1(TP, FP, FN):
     P = TP / (TP + FP)
     R = TP / (TP + FN)
     
-    if P + R == 0:
-        F1= 0
-    else:
-        F1 = 2 * P * R / (P + R)
+    F1 = 2 * P * R / (P + R)
     return "Precision: " + str(P) + ", Recall: " + str(R) + ", F1: " + str(F1)
 
 
