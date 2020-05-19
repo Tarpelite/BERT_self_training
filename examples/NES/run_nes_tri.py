@@ -630,8 +630,8 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
             outputs1 = model_f1(**inputs)
             outputs2 = model_f2(**inputs)
 
-            logits1 = outputs1[1] # [batch_size, seq_len, num_labels]
-            logits2 = outputs2[1]
+            logits1 = outputs1 # [batch_size, seq_len, num_labels]
+            logits2 = outputs2
 
             logits1 = softmax(logits1, dim=2)
             logits2 = softmax(logits2, dim=2)
