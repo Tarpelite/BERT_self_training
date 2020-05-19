@@ -824,6 +824,7 @@ def main():
     parser.add_argument("--N_init", default=100000, type=int)
     parser.add_argument("--joint_loss", action="store_true")
     parser.add_argument("--mini_batch_size", type=int, default=32)
+    parser.add_argument("--weight_decay", type=float, default=0.1)
     
 
     args = parser.parse_args()
