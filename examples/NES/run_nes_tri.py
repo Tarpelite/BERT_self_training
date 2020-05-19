@@ -485,8 +485,8 @@ def train_ft(args, model_ft, train_dataset):
     args.num_train_epochs = 1
     t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
     
-    if args.warmup_ratio > 0:
-        args.warmup_steps = int(t_total * args.warmup_ratio)
+    if args.warmup_proportion > 0:
+        args.warmup_steps = int(t_total * args.warmup_proportion)
     
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
