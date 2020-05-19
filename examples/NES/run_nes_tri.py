@@ -825,7 +825,8 @@ def main():
     parser.add_argument("--joint_loss", action="store_true")
     parser.add_argument("--mini_batch_size", type=int, default=32)
     parser.add_argument("--weight_decay", type=float, default=0.1)
-    
+    parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
+    parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
 
     args = parser.parse_args()
 
