@@ -847,7 +847,7 @@ def main():
                             args.gradient_accumulation_steps))
 
     args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
-    
+    args.n_gpu = n_gpu
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
