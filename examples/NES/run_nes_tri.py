@@ -549,7 +549,7 @@ def train_ft(args, model_ft, train_dataset):
             }
 
             outputs = model_ft(**inputs)
-            loss = outputs[0]
+            loss = outputs
 
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu 
