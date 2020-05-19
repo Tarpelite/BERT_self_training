@@ -25,6 +25,7 @@ from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
 from transformers import AdamW, get_linear_schedule_with_warmup
+from torch.nn.functional import softmax
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -744,7 +745,7 @@ def prepare_dataset(source_features, labeled_features):
 
     return dataset_L, dataset_TL
 
-def tri_train(args, model_f1, modelf_f2, model_ft, source_features, target_features):
+def tri_train(args, model_f1, model_f2, model_ft, source_features, target_features):
 
     Nt = args.N_init
     labeled_features = labelling(args, target_features, model_f1, model_f2, Nt)
@@ -922,10 +923,10 @@ def main():
         target_examples.extend(processor.get_sep_twitter_test_examples(args.data_dir))
 
         source_features = convert_examples_to_features(source_examples,
-        labels, args.max_seq_length, tokenizer)
+        label_list, args.max_seq_length, tokenizer)
 
         target_features = convert_examples_to_features(target_examples,
-        labels, args.max_seq_length, tokenizer)
+        label_list, args.max_seq_length, tokenizer)
 
         args.source_features = source_features
         args.target_features = target_features
