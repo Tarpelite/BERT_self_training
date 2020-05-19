@@ -625,8 +625,6 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
                 "input_ids": batch[0], 
                 "attention_mask": batch[1],
                 "token_type_ids":batch[2], 
-                "labels": batch[3],
-                "label_mask":batch[4]
             }
 
             outputs1 = model_f1(**inputs)
