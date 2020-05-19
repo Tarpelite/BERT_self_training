@@ -26,6 +26,11 @@ from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
 from transformers import AdamW, get_linear_schedule_with_warmup
 
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    from tensorboardX import SummaryWriter
+
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
                     level = logging.INFO)
