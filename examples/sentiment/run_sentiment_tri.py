@@ -180,6 +180,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
         
         
     logger.info("**** collect labeled data size %s", len(labeled_data))
+    logger.info("**** accuracy of pseudo labels: {}".format(accuracy_score(all_pseudo_true_labels, all_pseudo_labels)))
     return labeled_data
 
 def prepare_dataset(source_features, labeled_features):
