@@ -181,7 +181,7 @@ def labelling(args, all_target_data, model_f1, model_f2, N_init):
         
         with open(pseudo_acc_path, "w+", encoding="utf-8") as f:
             assert len(all_pseudo_true_labels) == len(all_pseudo_labels)
-            f.write( "{}\n".format(accuracy_score(all_pseudo_true_labels, all_pseudo_labels)) 
+            f.write( "{}\n".format(accuracy_score(all_pseudo_true_labels, all_pseudo_labels)))
         
         
     logger.info("**** collect labeled data size %s", len(labeled_data))
